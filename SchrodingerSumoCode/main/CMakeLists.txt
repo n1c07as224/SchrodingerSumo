@@ -1,2 +1,2 @@
-idf_component_register(SRCS "SchrodingerSumoCode.c"
+idf_component_register(SRCS "SchrodingerSumoCode.cpp"
                     INCLUDE_DIRS ".")
