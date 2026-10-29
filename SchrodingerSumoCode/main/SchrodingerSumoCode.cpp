@@ -19,8 +19,6 @@ ______________________________
 
 Autores:
 Nicolas Arredondo Jaime
-Christopher Guijosa Vaca
-Leonardo Zavala Angeles
 
 Referencias:
 1-Robojax, "Using Four VL53L0X Laser Distance Meters with Arduino", https://robojax.com/tutorial_view.php?lang=en&id=301#code-section-direct
@@ -51,7 +49,11 @@ constexpr float Kp;
 constexpr float Ki;
 constexpr float Kd;
 
-
+// Lectura de sensores
+constexpr uint_t dDistance = 150;
+constexpr uint_t dDistance_fast = 50;
+constexpr uint_t dDistance = 150;
+constexpr uint_t dDistance = 150;
 
 //---------------------GPIOs---------------------
 // Pines I2C
@@ -81,6 +83,23 @@ constexpr uint8_t MTR_R = 0;
 // Entradas analógicas
 constexpr uint8_t IS_L = 0;
 constexpr uint8_t IS_R = 0;
+
+
+
+//---------------------Estados---------------------
+struct FlagsState {
+
+    bool waiting = true;
+    uint8_t searching = 0; // 0= no buscar, 1= buscando, 2= buscar en la izquierda, 3= buscar en la derecha
+    bool enemy_found = false;
+    uint8_t pushing = 0; // 0= no empujando, 1= empujando, 2= empujando y perdiendo
+    uint8_t line = 0; //0= sin linea, 1= linea trasera izquierda, 2= linea trasera derecha, 3= linea frontal izquierda, 4= linea frontal derecha, 5= sensor trasero detecta linea proxima
+
+
+
+}
+
+
 
 
 
