@@ -26,7 +26,9 @@ Referencias:
 1-Robojax, "Using Four VL53L0X Laser Distance Meters with Arduino", https://robojax.com/tutorial_view.php?lang=en&id=301#code-section-direct
 
 
-
+Cosas a tomar en cuenta:
+- Los GPIO estan declarados para que el codigo sea ejecutado en un esp32s3
+- Todas las medidas usan el sistema internacional de unidades
 
 
 */
@@ -40,40 +42,50 @@ Referencias:
 #include "freertos/task.h"
 
 
-//---------------------Parametros y propiedades del robot---------------------
+//---------------------Propiedades del robot---------------------
+// Medidas fisicas
+constexpr uint8_t r_llantas = 30;
+
+// Constantes PID
+constexpr float Kp;
+constexpr float Ki;
+constexpr float Kd;
 
 
 
 //---------------------GPIOs---------------------
 // Pines I2C
-#define i2c_scl_pin
-#define i2c_sda_pin
+constexpr uint8_t i2c_sda_pin  = 8;
+constexpr uint8_t i2c_scl_pin  = 9;
+constexpr uint8_t i2c_sda2_pin = 4;
+constexpr uint8_t i2c_scl2_pin = 5;
 
 // Salidas digitales
-#define XSHUT_1
-#define XSHUT_2
-#define XSHUT_3
-#define XSHUT_4
-#define XSHUT_5
-#define XSHUT_6
+constexpr uint8_t XSHUT_1 = 14;
+constexpr uint8_t XSHUT_2 = 15;
+constexpr uint8_t XSHUT_3 = 16;
+constexpr uint8_t XSHUT_4 = 17;
+constexpr uint8_t XSHUT_5 = 18;
+constexpr uint8_t XSHUT_6 = 21;
 
 // Entradas digitales
-#define LS_FL
-#define LS_FR
-#define LS_RL
-#define LS_RR
+constexpr uint8_t LS_FL = 1;
+constexpr uint8_t LS_FR = 2;
+constexpr uint8_t LS_RL = 6;
+constexpr uint8_t LS_RR = 7;
 
 // Salidas PWM
-#define MTR_L
-#define MTR_R
+constexpr uint8_t MTR_L = 0;
+constexpr uint8_t MTR_R = 0;
 
-// Entradas analogicas
-#define IS_L
-#define IS_R
-
-
+// Entradas analógicas
+constexpr uint8_t IS_L = 0;
+constexpr uint8_t IS_R = 0;
 
 
+
+
+//========================================MAIN-START========================================
 void app_main(void)
 {
 
@@ -106,3 +118,12 @@ void app_main(void)
 
 
 }
+//========================================MAIN-END========================================
+
+
+
+
+//---------------------Funciones---------------------
+
+
+
