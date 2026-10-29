@@ -104,5 +104,8 @@ void app_main(void)
 
     //---------------------Configurar GPIOs---------------------
 
+    const int gpio_pins[] = {XSHUT_1, XSHUT_2, XSHUT_3, XSHUT_4, XSHUT_5, XSHUT_6, LS_FL, LS_FR, LS_RL, LS_RR};
+    const int num_gpio_pins = sizeof(gpio_pins) / sizeof(gpio_pins[0]);
+
 
 }
