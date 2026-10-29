@@ -17,8 +17,10 @@ ______________________________
  |      \_oo__oo_/#######o  |
  |__________________________|
 
-
-Autor: Nicolas Arredondo Jaime
+Autores:
+Nicolas Arredondo Jaime
+Christopher Guijosa Vaca
+Leonardo Zavala Angeles
 
 Referencias:
 1-Robojax, "Using Four VL53L0X Laser Distance Meters with Arduino", https://robojax.com/tutorial_view.php?lang=en&id=301#code-section-direct
@@ -37,6 +39,8 @@ Referencias:
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+
+//---------------------Parametros y propiedades del robot---------------------
 
 
 
