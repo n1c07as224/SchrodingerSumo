@@ -77,8 +77,12 @@ constexpr uint8_t LS_RL = 6;
 constexpr uint8_t LS_RR = 7;
 
 // Salidas PWM
-constexpr uint8_t MTR_L = 0;
-constexpr uint8_t MTR_R = 0;
+constexpr uint8_t MTR_L_PIN = 0;
+constexpr uint8_t MTR_R_PIN = 0;
+
+// Canales PWM
+constexpr ledc_channel_t MTR_L = LEDC_CHANNEL_0;
+constexpr ledc_channel_t MTR_R = LEDC_CHANNEL_1;
 
 // Entradas analógicas
 constexpr uint8_t IS_L = 0;
@@ -94,8 +98,6 @@ struct FlagsState {
     bool enemy_found = false;
     uint8_t pushing = 0; // 0= no empujando, 1= empujando, 2= empujando y perdiendo
     uint8_t line = 0; //0= sin linea, 1= linea trasera izquierda, 2= linea trasera derecha, 3= linea frontal izquierda, 4= linea frontal derecha, 5= sensor trasero detecta linea proxima
-
-
 
 }
 
@@ -123,17 +125,54 @@ void app_main(void)
     i2c_new_master_bus(&conf, &i2cBus);
 
     // PWM timer
-    ledc_timer_config_t timer_conf = {};
-    timer_conf.speed_mode       = LEDC_LOW_SPEED_MODE;
-    timer_conf.duty_resolution  = LEDC_TIMER_8_BIT;
-    timer_conf.timer_num        = LEDC_TIMER_0;
-    timer_conf.freq_hz          = 5000;
-
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode       = LEDC_LOW_SPEED_MODE,
+        .timer_num        = LEDC_TIMER_0,
+        .duty_resolution  = LEDC_TIMER_8_BIT,
+        .freq_hz          = 5000,
+        .clk_cfg          = LEDC_AUTO_CLK
+    };
     ledc_timer_config(&timer_conf);
 
 
 
     //---------------------Configurar GPIOs---------------------
+    // Salidas digitales
+    gpio_set_direction(XSHUT_1, GPIO_MODE_OUTPUT);
+    gpio_set_direction(XSHUT_2, GPIO_MODE_OUTPUT);
+    gpio_set_direction(XSHUT_3, GPIO_MODE_OUTPUT);
+    gpio_set_direction(XSHUT_4, GPIO_MODE_OUTPUT);
+    gpio_set_direction(XSHUT_5, GPIO_MODE_OUTPUT);
+    gpio_set_direction(XSHUT_6, GPIO_MODE_OUTPUT);
+
+    // Entradas digitales
+    gpio_set_direction(LS_FL, GPIO_MODE_INPUT);
+    gpio_set_direction(LS_FR, GPIO_MODE_INPUT);
+    gpio_set_direction(LS_RL, GPIO_MODE_INPUT);
+    gpio_set_direction(LS_RR, GPIO_MODE_INPUT);
+
+    // Salidas PWM
+    ledc_channel_config_t MTR_L_Config = {
+        .speed_mode     = LEDC_LOW_SPEED_MODE,
+        .channel        = LEDC_CHANNEL_0,
+        .timer_sel      = LEDC_TIMER_0,
+        .intr_type      = LEDC_INTR_DISABLE,
+        .gpio_num       = MTR_L_PIN,
+        .duty           = 0,
+        .hpoint         = 0
+    };
+    ledc_channel_config(&MTR_L_Config);
+
+    ledc_channel_config_t MTR_R_Config = {
+        .speed_mode     = LEDC_LOW_SPEED_MODE,
+        .channel        = LEDC_CHANNEL_1,
+        .timer_sel      = LEDC_TIMER_0,
+        .intr_type      = LEDC_INTR_DISABLE,
+        .gpio_num       = MTR_R_PIN,
+        .duty           = 0,
+        .hpoint         = 0
+    };
+    ledc_channel_config(&MTR_R_Config);
 
 
 }
