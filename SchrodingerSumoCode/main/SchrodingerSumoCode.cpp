@@ -156,7 +156,7 @@ extern "C" void app_main(void)
     i2c_bus_config.glitch_ignore_cnt = 7;
     i2c_bus_config.flags.enable_internal_pullup = true;
 
-    i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle);
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle));
 
     // PWM timer
     ledc_timer_config_t timer_config{};
@@ -166,7 +166,7 @@ extern "C" void app_main(void)
     timer_config.freq_hz = 5000;
     timer_config.clk_cfg = LEDC_AUTO_CLK;
 
-    ledc_timer_config(&timer_config);
+    ESP_ERROR_CHECK(ledc_timer_config(&timer_config));
 
     // ADC
     adc_oneshot_unit_init_cfg_t adc_init_config = {};
@@ -202,18 +202,18 @@ extern "C" void app_main(void)
 void init_gpio_adc_pwm() {
 
     // Salidas digitales
-    gpio_set_direction(XSHUT_1, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_2, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_3, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_4, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_5, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_6, GPIO_MODE_OUTPUT);
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_1, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_2, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_3, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_4, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_5, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_6, GPIO_MODE_OUTPUT));
 
     // Entradas digitales
-    gpio_set_direction(LS_FL, GPIO_MODE_INPUT);
-    gpio_set_direction(LS_FR, GPIO_MODE_INPUT);
-    gpio_set_direction(LS_RL, GPIO_MODE_INPUT);
-    gpio_set_direction(LS_RR, GPIO_MODE_INPUT);
+    ESP_ERROR_CHECK(gpio_set_direction(LS_FL, GPIO_MODE_INPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(LS_FR, GPIO_MODE_INPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(LS_RL, GPIO_MODE_INPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(LS_RR, GPIO_MODE_INPUT));
 
     // Salidas PWM
     ledc_channel_config_t MTR1_L_Config{};
