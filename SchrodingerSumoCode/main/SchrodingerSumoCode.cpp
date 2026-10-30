@@ -46,30 +46,30 @@ Referencias:
 
 //---------------------GPIOs---------------------
 // Pines I2C
-#define i2c_scl_pin
-#define i2c_sda_pin
+#define i2c_scl_pin GPIO_NUM_4
+#define i2c_sda_pin GPIO_NUM_5
 
 // Salidas digitales
-#define XSHUT_1
-#define XSHUT_2
-#define XSHUT_3
-#define XSHUT_4
-#define XSHUT_5
-#define XSHUT_6
+#define XSHUT_1 GPIO_NUM_14
+#define XSHUT_2 GPIO_NUM_15
+#define XSHUT_3 GPIO_NUM_16
+#define XSHUT_4 GPIO_NUM_17
+#define XSHUT_5 GPIO_NUM_18
+#define XSHUT_6 GPIO_NUM_21
 
 // Entradas digitales
-#define LS_FL
-#define LS_FR
-#define LS_RL
-#define LS_RR
+#define LS_FL ADC_CHANNEL_0
+#define LS_FR ADC_CHANNEL_1
+#define LS_RL ADC_CHANNEL_5
+#define LS_RR ADC_CHANNEL_6
 
 // Salidas PWM
-#define MTR_L
-#define MTR_R
+#define MTR_L GPIO_NUM_12
+#define MTR_R GPIO_NUM_13
 
 // Entradas analogicas
-#define IS_L
-#define IS_R
+#define IS_L ADC_CHANNEL_0
+#define IS_R ADC_CHANNEL_1
 
 
 
@@ -89,7 +89,7 @@ void app_main(void)
     i2c_bus_config.glitch_ignore_cnt = 7;
     i2c_bus_config.flags.enable_internall_pullup = true;
 
-    i2c_new_master_bus(&conf, &i2cBus);
+    i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle);
 
     // PWM timer
     ledc_timer_config_t timer_conf = {};
@@ -103,48 +103,5 @@ void app_main(void)
 
 
     //---------------------Configurar GPIOs---------------------
-
-    static const gpio_num_t x_shut_pins[] = { //GPIO X-SHUT
-        GPIO_NUM_14,
-        GPIO_NUM_15,
-        GPIO_NUM_16,
-        GPIO_NUM_17,
-        GPIO_NUM_18,
-        GPIO_NUM_21
-    };
-    static const adc_channel_t qtr_channels[] = { //GPIO LS
-        ADC_CHANNEL_0,
-        ADC_CHANNEL_1,
-        ADC_CHANNEL_5,
-        ADC_CHANNEL_6
-    };
-
-    typedef struct {    //Agrupación para los pines de los puente h
-        gpio_num_t RPWM_pin;
-        gpio_num_t LPWM_pin;
-        gpio_num_t R_EN_pin;
-        gpio_num_t L_EN_pin;
-    } motor_pins_t;
-    
-    static const motor_pins_t motor_pins_BTS_1 = {    //GPIOs del puente h BTS7960#1        
-        .RPWM_pin = GPIO_NUM_12,
-        .LPWM_pin = GPIO_NUM_13,
-        .R_EN_pin = GPIO_NUM_38,
-        .L_EN_pin = GPIO_NUM_39
-    };
-    
-    static const motor_pins_t motor_pins_BTS_2 = {    //GPIOs del puente h BTS7960#2
-        .RPWM_pin = GPIO_NUM_40,
-        .LPWM_pin = GPIO_NUM_41,
-        .R_EN_pin = GPIO_NUM_42,
-        .L_EN_pin = GPIO_NUM_47
-    };
-    // GPIO Encoder
-    #define PIN_ENC_1 GPIO_NUM_10
-    #define PIN_ENC_2 GPIO_NUM_11
-    // GPIO Judge controler
-    #define PIN_RDY GPIO_NUM_44
-    #define PIN_GO GPIO_NUM_43
-
 
 }
