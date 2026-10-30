@@ -24,6 +24,7 @@ Leonardo Zavala Angeles
 
 Referencias:
 1-Robojax, "Using Four VL53L0X Laser Distance Meters with Arduino", https://robojax.com/tutorial_view.php?lang=en&id=301#code-section-direct
+2-Descubrearduino, "Cómo hacer un PID con Arduino", https://descubrearduino.com/como-hacer-un-pid-con-arduino/
 
 
 Cosas a tomar en cuenta:
@@ -56,10 +57,16 @@ Cosas a tomar en cuenta:
 // Medidas fisicas
 constexpr uint8_t r_llantas = 30;
 
-// Constantes PID
+// Constantes y variables matematicas
 constexpr float Kp = 0.0f;
 constexpr float Ki = 0.0f;
 constexpr float Kd = 0.0f;
+
+float previous_time = 0.0f;
+float current_time = 0.0f;
+float last_error = 0.0f;
+float integ_error = 0.0f;
+
 
 // Lectura de sensores
 constexpr uint16_t dDS = 150;
@@ -263,5 +270,25 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS2_L, &adc_channel_config));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS2_R, &adc_channel_config));
 
+}
+
+
+float PID_calc(int set_point, int rpm_read) {
+
+    float error = set_point - rpm_read;
+    float dTime = current_time - previous_time;
+
+    // Integral
+    integ_error += error * dTime;
+
+    // Derivada
+    float deriv_error = (error - last_error) / dTime;
+
+    float result = Kp * error + Ki * integ_error + Kd * deriv_error;
+
+    last_error = error;
+    previous_time = current_time;
+
+    return result;
 }
 
