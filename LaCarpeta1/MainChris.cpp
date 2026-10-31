@@ -28,7 +28,8 @@ Referencias:
 3-Descubrearduino, "Cómo hacer un PID con Arduino", https://descubrearduino.com/como-hacer-un-pid-con-arduino/
 4-Del Código a la Arquitectura, "Máquinas de Estado: El patrón para eliminar los "If" anidados", https://youtu.be/sTyRxey86Jw?si=h-pryMeM7pt8JGrz 
 5-W3schools, "C++ Enumeration (enum)", https://www.w3schools.com/cpp/cpp_enum.asp
-6-
+6-Bro Code, "What is a switch?", https://www.youtube.com/watch?v=Bx9b12FCF5o
+
 
 
 Cosas a tomar en cuenta:
@@ -54,6 +55,7 @@ Cosas a tomar en cuenta:
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "iostream"
 
 
 
@@ -77,7 +79,9 @@ constexpr uint16_t dDS_fast = 50;
 constexpr uint16_t dIMU = 150;
 constexpr uint16_t dIS = 150;
 
-
+//Variables Time
+constexpr uint16_t loop_time = 10; //ms
+int64_t now = esp_timer_get_time() / 1000; 
 
 
 //---------------------Estados y prioridades---------------------
@@ -328,17 +332,38 @@ void init_distance_sensors() {
 
 
 
+}
 
-
-
-
+void updateState(){
 
 }
 
+void executeState(State){
+    /*IDLE,
+    SEARCHING,
+    ENEMY_FOUNDED,
+    ENEMY_LOST_L,
+    ENEMY_LOST_R,
+    PUSHING,
+    PUSHING_LOSING,
+    LINE_FL,
+    LINE_FR,
+    LINE_RL,
+    LINE_RR,
+    CLOSE_TO_LINE,
+    COUNT*/
 
+    switch (State)
+    {
+    case  expression:
+        /* code */
+        break;
+    
+    default:
+        break;
+    }
 
-
-
+}
 
 float PID_calc(int set_point, int rpm_read) {
 
@@ -357,4 +382,8 @@ float PID_calc(int set_point, int rpm_read) {
     previous_time = current_time;
 
     return result;
+}
+
+while (1){
+    updateState();
 }
