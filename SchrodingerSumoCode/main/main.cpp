@@ -34,6 +34,7 @@ Referencias:
 Cosas a tomar en cuenta:
 - Los GPIO estan declarados para que el codigo sea ejecutado en un esp32s3
 - Todas las medidas usan el sistema internacional de unidades
+- Todas las funciones y declaraciones encargadas del control del harware se encuentran en el directorio /Hardware
 
 
 */
