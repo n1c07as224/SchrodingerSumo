@@ -139,6 +139,17 @@ struct FlagsState {
 //---------------------Inicializar funciones---------------------
 void init_gpio_adc_pwm();
 
+//---------------------Funciones de movimiento---------------------
+void set_motor(int motor, int speed);
+void stop_motors();
+void move_forward(uint8_t speed);
+void move_backward(uint8_t speed);
+void turn_left(uint8_t speed);
+void turn_right(uint8_t speed);
+void rotate_left(uint8_t speed);
+void rotate_right(uint8_t speed);
+void execute_movement(const FlagsState& flags);
+
 
 //=======================================================MAIN-START=======================================================
 extern "C" void app_main(void)
@@ -180,6 +191,13 @@ extern "C" void app_main(void)
     //---------------------Inicializar sensores y motores---------------------
     init_gpio_adc_pwm();
 
+    // Actualizar Flags
+    FlagsState flags{};
+    while (true) {
+        execute_movement(flags);
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
 
 
 
@@ -216,7 +234,7 @@ void init_gpio_adc_pwm() {
     gpio_set_direction(LS_RR, GPIO_MODE_INPUT);
 
     // Salidas PWM
-    ledc_channel_config_t MTR1_L_Config{};
+    ledc_channel_config_t MTR1_L_Config{};  // Avance motor 1
     MTR1_L_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR1_L_Config.channel = MTR1_L;
     MTR1_L_Config.timer_sel = LEDC_TIMER_0;
@@ -227,7 +245,7 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(ledc_channel_config(&MTR1_L_Config));
 
 
-    ledc_channel_config_t MTR1_R_Config{};
+    ledc_channel_config_t MTR1_R_Config{};  // Reversa motor 1
     MTR1_R_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR1_R_Config.channel = MTR1_R;
     MTR1_R_Config.timer_sel = LEDC_TIMER_0;
@@ -238,7 +256,7 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(ledc_channel_config(&MTR1_R_Config));
 
 
-    ledc_channel_config_t MTR2_L_Config{};
+    ledc_channel_config_t MTR2_L_Config{};  // Avance motor 2
     MTR2_L_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR2_L_Config.channel = MTR2_L;
     MTR2_L_Config.timer_sel = LEDC_TIMER_0;
@@ -249,7 +267,7 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(ledc_channel_config(&MTR2_L_Config));
 
 
-    ledc_channel_config_t MTR2_R_Config{};
+    ledc_channel_config_t MTR2_R_Config{};  // Reversa motor 2
     MTR2_R_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR2_R_Config.channel = MTR2_R;
     MTR2_R_Config.timer_sel = LEDC_TIMER_0;
@@ -273,6 +291,140 @@ void init_gpio_adc_pwm() {
 }
 
 
+//---------------------Control de motores---------------------
+void set_motor(int motor, int speed) {
+    speed = (speed > 255) ? 255 : speed;
+    speed = (speed < -255) ? -255 : speed;
+
+    // Selección de canales PWM según el motor
+    if(motor == 1) { // Motor1
+        ledc_channel_t forward_channel = MTR1_L;
+        ledc_channel_t reverse_channel = MTR1_R;
+    } else if(motor == 2) { // Motor2
+        ledc_channel_t forward_channel = MTR2_L;
+        ledc_channel_t reverse_channel = MTR2_R;
+    } else {
+        return; // Motor inválido
+    }
+    // Conversión de velocidad a PWM
+    if (speed > 0) {
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, static_cast<uint32_t>(speed));
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, 0);
+    } else if (speed < 0) {
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, 0);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, static_cast<uint32_t>(-speed));
+    } else {
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, 0);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, 0);
+    }
+
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, forward_duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, forward_channel);
+    
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, reverse_duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, reverse_channel);
+}
+
+void stop_motors() {
+    set_motor(1, 0);
+    set_motor(2, 0);
+}
+
+void move_forward(uint8_t speed) {
+    set_motor(1, speed);
+    set_motor(2, speed);
+}
+
+void move_backward(uint8_t speed) {
+    set_motor(1, -static_cast<int>(speed));
+    set_motor(2, -static_cast<int>(speed));
+}
+
+// Rotar
+void rotate_left(uint8_t speed) {
+    set_motor(1, -static_cast<int>(speed));
+    set_motor(2, speed);
+}
+
+void rotate_right(uint8_t speed) {
+    set_motor(1, speed);
+    set_motor(2, -static_cast<int>(speed));
+}
+
+// Giro
+void turn_left(uint8_t speed) {
+    set_motor(1, 0);
+    set_motor(2, speed);
+}
+
+void turn_right(uint8_t speed) {
+    set_motor(1, speed);
+    set_motor(2, 0);
+}
+
+void execute_movement(const FlagsState& flags) {
+    constexpr uint8_t SPEED_SEARCH = 100;
+    constexpr uint8_t SPEED_FORWARD = 180;
+    constexpr uint8_t SPEED_PUSH = 255;
+    constexpr uint8_t SPEED_ESCAPE = 210;
+
+    switch (flags.line) {
+        case 1: // Línea trasera izquierda
+            set_motor(1, SPEED_ESCAPE);
+            set_motor(2, SPEED_FORWARD);
+            return;
+        case 2: // Línea trasera derecha
+            set_motor(1, SPEED_FORWARD);
+            set_motor(2, SPEED_ESCAPE);
+            return;
+        case 3: // Línea frontal izquierda
+            set_motor(1, -static_cast<int>(SPEED_ESCAPE));
+            set_motor(2, -static_cast<int>(SPEED_FORWARD));
+            return;
+        case 4: // Línea frontal derecha
+            set_motor(1, -static_cast<int>(SPEED_FORWARD));
+            set_motor(2, -static_cast<int>(SPEED_ESCAPE));
+            return;
+        case 5: // Línea próxima al sensor trasero.
+            move_forward(SPEED_ESCAPE);
+            return;
+        default:
+            break;
+    }
+
+    if (flags.pushing == 2) {
+        if (flags.searching == 2) {
+            rotate_left(SPEED_SEARCH);
+        } else if (flags.searching == 3) {
+            rotate_right(SPEED_SEARCH);
+        } else {
+            move_forward(SPEED_FORWARD);
+        }
+        return;
+    }
+
+    if (flags.enemy_found || flags.pushing == 1) {
+        move_forward(SPEED_PUSH);
+        return;
+    }
+
+    switch (flags.searching) {
+        case 2:
+            rotate_left(SPEED_SEARCH);
+            return;
+        case 3:
+            rotate_right(SPEED_SEARCH);
+            return;
+        case 1:
+            rotate_right(SPEED_SEARCH);
+            return;
+        default:
+            stop_motors();
+            return;
+    }
+}
+
+
 float PID_calc(int set_point, int rpm_read) {
 
     float error = set_point - rpm_read;
@@ -282,7 +434,7 @@ float PID_calc(int set_point, int rpm_read) {
     integ_error += error * dTime;
 
     // Derivada
-    float deriv_error = (error - last_error) / dTime;
+    float deriv_error = (dTime > 0.0f) ? (error - last_error) / dTime : 0.0f;
 
     float result = Kp * error + Ki * integ_error + Kd * deriv_error;
 
