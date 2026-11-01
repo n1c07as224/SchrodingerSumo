@@ -89,7 +89,7 @@ enum State {
 
     IDLE,
     SEARCHING,
-    ENEMY_FOUNDED,
+    ENEMY_FOUND,
     ENEMY_LOST_L,
     ENEMY_LOST_R,
     PUSHING,
@@ -99,7 +99,7 @@ enum State {
     LINE_RL,
     LINE_RR,
     CLOSE_TO_LINE,
-    COUNT
+    COUNT           //COUNT?
 
 };
 
@@ -115,7 +115,7 @@ constexpr StateConfig robotStatePriority[COUNT] {
 
     {IDLE, 5},
     {SEARCHING, 1},
-    {ENEMY_FOUNDED, 2},
+    {ENEMY_FOUND, 2},    //FOUNDED? Que te pasa
     {ENEMY_LOST_L, 2},
     {ENEMY_LOST_R, 2},
     {PUSHING, 2},
@@ -334,11 +334,9 @@ void init_distance_sensors() {
 
 }
 
-void updateState(){
+State 
 
-}
-
-void executeState(State){
+void executeState(State CurrentState){
     /*IDLE,
     SEARCHING,
     ENEMY_FOUNDED,
@@ -353,13 +351,53 @@ void executeState(State){
     CLOSE_TO_LINE,
     COUNT*/
 
-    switch (State)
-    {
-    case  expression:
+    switch (CurrentState){
+    case IDLE:
         /* code */
+
+        break;
+    case SEARCHING:
+
+
+        break;
+    case ENEMY_FOUND:
+
+
+        break;
+
+    case ENEMY_LOST_L:
+    
+
+        break;
+
+    case ENEMY_LOST_R:
+
+
+        break;
+
+    case PUSHING:
+
+
+        break;
+
+    case PUSHING_LOSING:
+
+
+        break;
+
+    case LINE_FL:
+    case LINE_FR:
+    case LINE_RL:
+    case LINE_RR:
+
+
         break;
     
+    case CLOSE_TO_LINE:
+
+
     default:
+
         break;
     }
 
@@ -382,6 +420,14 @@ float PID_calc(int set_point, int rpm_read) {
     previous_time = current_time;
 
     return result;
+}
+
+//---------------ACTIONS---------------------------
+void searchOpponent{
+
+}
+void idle{
+    
 }
 
 while (1){
