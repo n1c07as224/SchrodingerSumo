@@ -23,14 +23,13 @@ Christopher Guijosa Vaca
 Leonardo Zavala Angeles
 
 Referencias:
-1-Robojax, "Using Four VL53L0X Laser Distance Meters with Arduino", https://robojax.com/tutorial_view.php?lang=en&id=301#code-section-direct
-2-GeeksforGeeks, "Understanding constexpr Specifier in C++", https://www.geeksforgeeks.org/cpp/understanding-constexper-specifier-in-cpp/
-3-Descubrearduino, "Cómo hacer un PID con Arduino", https://descubrearduino.com/como-hacer-un-pid-con-arduino/
-4-Del Código a la Arquitectura, "Máquinas de Estado: El patrón para eliminar los "If" anidados", https://youtu.be/sTyRxey86Jw?si=h-pryMeM7pt8JGrz 
-5-W3schools, "C++ Enumeration (enum)", https://www.w3schools.com/cpp/cpp_enum.asp
-6-Bro Code, "What is a switch?", https://www.youtube.com/watch?v=Bx9b12FCF5o
-
-
+1- Robojax, "Using Four VL53L0X Laser Distance Meters with Arduino", https://robojax.com/tutorial_view.php?lang=en&id=301#code-section-direct
+2- GeeksforGeeks, "Understanding constexpr Specifier in C++", https://www.geeksforgeeks.org/cpp/understanding-constexper-specifier-in-cpp/
+3- Descubrearduino, "Cómo hacer un PID con Arduino", https://descubrearduino.com/como-hacer-un-pid-con-arduino/
+4- Del Código a la Arquitectura, "Máquinas de Estado: El patrón para eliminar los "If" anidados", https://youtu.be/sTyRxey86Jw?si=h-pryMeM7pt8JGrz 
+5- W3schools, "C++ Enumeration (enum)", https://www.w3schools.com/cpp/cpp_enum.asp
+6- Bro Code, "What is a switch?", https://www.youtube.com/watch?v=Bx9b12FCF5o
+7- 
 
 Cosas a tomar en cuenta:
 - Los GPIO estan declarados para que el codigo sea ejecutado en un esp32s3
@@ -40,24 +39,18 @@ Cosas a tomar en cuenta:
 */
 
 
-
-
-
 //------------------------------------------SETUP------------------------------------------
 
 //----------------------------Librerias----------------------------
 #include <stdio.h>
 #include <cstdint>
-#include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "iostream"
-
-
+#include <iostream>
 
 //---------------------Propiedades del robot---------------------
 // Medidas fisicas del robot
@@ -70,8 +63,8 @@ constexpr float Kd = 0.0f;
 
 float previous_time = 0.0f;
 float current_time = 0.0f;
-float last_error = 0.0f;
-float integ_error = 0.0f;
+/*float last_error = 0.0f;
+float integ_error = 0.0f;*/
 
 // Frecuencia en la lectura de sensores
 constexpr uint16_t dDS = 150;
@@ -81,10 +74,27 @@ constexpr uint16_t dIS = 150;
 
 //Variables Time
 constexpr uint16_t loop_time = 10; //ms
-int64_t now = esp_timer_get_time() / 1000; 
+int64_t now = 0; 
 
+//RPM AND MOTORS
+struct PID_STATE{
+    float last_error;
+    float integ_error;
+};
+
+PID_STATE pidIzq = {0.0f, 0.0f};
+PID_STATE pidDer = {0.0f, 0.0f};
+
+// Objetivo RPM
+float rpm_obj_izq = 0.0f;
+float rpm_obj_der = 0.0f;
+
+// Medicion RPM
+float rpm_reading_izq = 0.0f;
+float rpm_reading_der = 0.0f;
 
 //---------------------Estados y prioridades---------------------
+
 enum State {
 
     IDLE,
@@ -132,8 +142,6 @@ constexpr StateConfig robotStatePriority[COUNT] {
 State robotState = IDLE;
 State lastRobotState = IDLE;
 State beforeLastRobotState = IDLE;
-
-
 
 
 //---------------------GPIOs---------------------
@@ -192,10 +200,6 @@ void init_gpio_adc_pwm();
 
 
 
-
-
-
-
 //=======================================================MAIN-START=======================================================
 extern "C" void app_main(void)
 {
@@ -232,7 +236,25 @@ extern "C" void app_main(void)
 
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc_init_config, &adc1_handle));
 
+    //PID
+    float PID_calc(int set_point, int rpm_read) {
 
+        float error = set_point - rpm_read;
+        float dTime = current_time - previous_time;
+
+        // Integral
+        integ_error += error * dTime;
+
+        // Derivada
+        float deriv_error = (error - last_error) / dTime;
+
+        float result = Kp * error + Ki * integ_error + Kd * deriv_error;
+
+        last_error = error;
+        previous_time = current_time;
+
+        return result;
+    }
     //---------------------Inicializar sensores y motores---------------------
     init_gpio_adc_pwm();
 
@@ -240,13 +262,8 @@ extern "C" void app_main(void)
 
 
 
-
-
-
 }
 //=======================================================MAIN-END=======================================================
-
-
 
 
 
@@ -334,7 +351,6 @@ void init_distance_sensors() {
 
 }
 
-State 
 
 void executeState(State CurrentState){
     /*IDLE,
@@ -396,6 +412,8 @@ void executeState(State CurrentState){
     case CLOSE_TO_LINE:
 
 
+        break;
+
     default:
 
         break;
@@ -403,33 +421,19 @@ void executeState(State CurrentState){
 
 }
 
-float PID_calc(int set_point, int rpm_read) {
-
-    float error = set_point - rpm_read;
-    float dTime = current_time - previous_time;
-
-    // Integral
-    integ_error += error * dTime;
-
-    // Derivada
-    float deriv_error = (error - last_error) / dTime;
-
-    float result = Kp * error + Ki * integ_error + Kd * deriv_error;
-
-    last_error = error;
-    previous_time = current_time;
-
-    return result;
-}
 
 //---------------ACTIONS---------------------------
-void searchOpponent{
+void searchOpponent(){
 
 }
-void idle{
+void idle(){
     
 }
 
+void motor_set( )
 while (1){
+    //Read NOW
+    now = esp_timer_get_time() / 1000;
+
     updateState();
 }
