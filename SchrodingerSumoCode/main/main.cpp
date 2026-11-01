@@ -28,7 +28,7 @@ Referencias:
 3-Descubrearduino, "Cómo hacer un PID con Arduino", https://descubrearduino.com/como-hacer-un-pid-con-arduino/
 4-Del Código a la Arquitectura, "Máquinas de Estado: El patrón para eliminar los "If" anidados", https://youtu.be/sTyRxey86Jw?si=h-pryMeM7pt8JGrz 
 5-W3schools, "C++ Enumeration (enum)", https://www.w3schools.com/cpp/cpp_enum.asp
-6-
+6-Pkolt, "pkolt/vl53l0x README", https://components.espressif.com/components/pkolt/vl53l0x/versions/1.0.0/readme#api
 
 
 Cosas a tomar en cuenta:
@@ -52,10 +52,12 @@ Cosas a tomar en cuenta:
 #include "driver/i2c_master.h"
 #include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
-#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "Hardware/motor.h"
+#include "Hardware/distance_sensor.h"
+#include "Hardware/line_sensor.h"
 
 
 //---------------------Propiedades del robot---------------------
@@ -86,7 +88,7 @@ enum State {
 
     IDLE,
     SEARCHING,
-    ENEMY_FOUNDED,
+    ENEMY_FOUND,
     ENEMY_LOST_L,
     ENEMY_LOST_R,
     PUSHING,
@@ -112,7 +114,7 @@ constexpr StateConfig robotStatePriority[COUNT] {
 
     {IDLE, 5},
     {SEARCHING, 1},
-    {ENEMY_FOUNDED, 2},
+    {ENEMY_FOUND, 2},
     {ENEMY_LOST_L, 2},
     {ENEMY_LOST_R, 2},
     {PUSHING, 2},

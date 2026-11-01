@@ -1,67 +1,40 @@
 #pragma once
 
 #include <cstdint>
+#include "driver/gpio.h"
+#include "vl53l0x.h"
 
 namespace DistanceS {
 
-    namespace FL {
+    class DS {
+        public:
 
-        constexpr uint8_t address = 0x29;
-        uint16_t getDist();
-        void setHzReading();
-    }
+            // Propiedades
+            uint8_t address = 0x29;
+            vl53l0x_handle_t sensor_handle = NULL;
+            gpio_num_t XShut;
+            
+            // Funciones
+            uint16_t read();
+            void setReadFreq();
 
-    namespace FC {
-
-        constexpr uint8_t address = 0x30;
-        uint16_t getDist();
-        void setHzReading();
-    }
-
-    namespace FR {
-
-        constexpr uint8_t address = 0x31;
-        uint16_t getDist();
-        void setHzReading();
-    }
-
-    namespace RL {
-
-        constexpr uint8_t address = 0x32;
-        uint16_t getDist();
-        void setHzReading();
-    }
-
-    namespace RC {
-
-        constexpr uint8_t address = 0x33;
-        uint16_t getDist();
-        void setHzReading();
-    }
-
-    namespace RR {
-
-        constexpr uint8_t address = 0x34;
-        uint16_t getDist();
-        void setHzReading();
-    }
+    };
 
 
+    struct distances {
+
+        uint16_t FL_dist;
+        uint16_t FC_dist;
+        uint16_t FR_dist;
+        uint16_t RL_dist;
+        uint16_t RC_dist;
+        uint16_t RR_dist;
+
+    };
+
+
+    distances getAllDistances();
 
     void initAll();
-
-    struct Distances {
-
-        uint16_t fl_dist;
-        uint16_t fc_dist;
-        uint16_t fr_dist;
-        uint16_t rl_dist;
-        uint16_t rc_dist;
-        uint16_t rr_dist;
-
-    }
-    
-    Distances getAllDistances();
-
 
 };
