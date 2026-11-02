@@ -1,4 +1,14 @@
 dependencies:
+  espressif/as5600:
+    component_hash: ddbb4bb2ca69d3d1f46faa1a433c0cd1ca9c495d676bfa7a08abfec6d2e8ec44
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.1.0
   idf:
     source:
       type: idf
@@ -14,8 +24,9 @@ dependencies:
       type: service
     version: 1.0.0
 direct_dependencies:
+- espressif/as5600
 - idf
 - pkolt/vl53l0x
-manifest_hash: 15cb6f4153e1fd4a121a9cadeaf1af800f0b3862bcfec44b245c26d2a1eb2ea3
+manifest_hash: e0dfff82995c4845f9248bb25b91efaf7983d304912a60e8ecd70555349c84aa
 target: esp32s3
 version: 3.0.0

@@ -1,40 +1,42 @@
 #pragma once
 
-namespace Motor1 {
+#include <cstdint>
+#include "driver/gpio.h"
+#include "driver/ledc.h"
+#include "esp_adc/adc_oneshot.h"
+#include "driver/i2c_master.h"
+#include "as5600.h"
 
-constexpr gpio_num_t PWML_PIN = GPIO_NUM_12;
-constexpr gpio_num_t PWMR_PIN = GPIO_NUM_13;
 
-constexpr ledc_channel_t PWML = LEDC_CHANNEL_0;
-constexpr ledc_channel_t PWMR = LEDC_CHANNEL_1;
+namespace Motor {
 
-constexpr gpio_num_t ISL_PIN = GPIO_NUM_3;
-constexpr gpio_num_t ISR_PIN = GPIO_NUM_10;
+    class MTR {
+        public:
 
-constexpr adc_channel_t ISL = ADC_CHANNEL_0;
-constexpr adc_channel_t ISR = ADC_CHANNEL_1;
+            // Propiedades
+            gpio_num_t PWML_PIN;
+            gpio_num_t PWMR_PIN;
+
+            ledc_channel_t PWML;
+            ledc_channel_t PWMR;
+
+            gpio_num_t ISL_PIN;
+            gpio_num_t ISR_PIN;
+
+            adc_channel_t ISL;
+            adc_channel_t ISR;
+
+            int16_t RPM = 0;
+
+            bool PID_STATE = 1;
+            
+
+            // Funciones
+            void init();
+            void move(uint16_t set_point);
+
+    };
 
 }
-
-
-
-
-namespace Motor2 {
-
-constexpr gpio_num_t PWML_PIN = GPIO_NUM_40;
-constexpr gpio_num_t PWMR_PIN = GPIO_NUM_41;
-
-constexpr ledc_channel_t PWML = LEDC_CHANNEL_2;
-constexpr ledc_channel_t PWMR = LEDC_CHANNEL_3;
-
-constexpr gpio_num_t ISL_PIN = GPIO_NUM_19;
-constexpr gpio_num_t ISR_PIN = GPIO_NUM_20;
-
-constexpr adc_channel_t ISL = ADC_CHANNEL_2;
-constexpr adc_channel_t ISR = ADC_CHANNEL_3;
-
-}
-
-
 
 

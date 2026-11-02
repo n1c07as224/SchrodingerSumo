@@ -1,18 +1,18 @@
 #include "distance_sensors.h"
 
-#include "Comunication/i2c.h"
+#include "Config/i2c_bus.h"
 #include "driver/gpio.h"
 #include <cstdint>
 #include "vl53l0x.h"
 
 using namespace DistanceS;
 
-DS FL {.address = 0x29, XShut = GPIO_NUM_14};
-DS FC {.address = 0x30, XShut = GPIO_NUM_15};
-DS FR {.address = 0x31, XShut = GPIO_NUM_16};
-DS RL {.address = 0x32, XShut = GPIO_NUM_17};
-DS RC {.address = 0x33, XShut = GPIO_NUM_18};
-DS RR {.address = 0x34, XShut = GPIO_NUM_21};
+DS FL {.address = 0x29, .XShut = GPIO_NUM_14};
+DS FC {.address = 0x30, .XShut = GPIO_NUM_15};
+DS FR {.address = 0x31, .XShut = GPIO_NUM_16};
+DS RL {.address = 0x32, .XShut = GPIO_NUM_17};
+DS RC {.address = 0x33, .XShut = GPIO_NUM_18};
+DS RR {.address = 0x34, .XShut = GPIO_NUM_21};
 
 
 static DS* Sensors[6] = {&FL, &FC, &FR, &RL, &RC, &RR};
@@ -41,7 +41,7 @@ void initAll() {
 
         vTaskDelay(pdMS_TO_TICKS(2));
 
-        vl53l0x_create(&Sensors[i]->sensor_handle, bus_handle);
+        vl53l0x_create(&(Sensors[i]->sensor_handle), bus_handle);
         vl53l0x_set_address(Sensors[i]->sensor_handle, bus_handle, Sensors[i]->address);
         vl53l0x_init(Sensors[i]->sensor_handle);
     
@@ -75,5 +75,15 @@ uint16_t DS::read() {
 }
 
 
+distances getAllDistances() {
+    FL.read();
+    FC.read();
+    FR.read();
+    RL.read();
+    RC.read();
+    RR.read();
+
+    return {FL.distance, FC.distance, FR.distance, RL.distance, RC.distance, RR.distance};
+}
 
 

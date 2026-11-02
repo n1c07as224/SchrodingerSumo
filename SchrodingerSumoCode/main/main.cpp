@@ -29,7 +29,7 @@ Referencias:
 4-Del Código a la Arquitectura, "Máquinas de Estado: El patrón para eliminar los "If" anidados", https://youtu.be/sTyRxey86Jw?si=h-pryMeM7pt8JGrz 
 5-W3schools, "C++ Enumeration (enum)", https://www.w3schools.com/cpp/cpp_enum.asp
 6-Pkolt, "pkolt/vl53l0x README", https://components.espressif.com/components/pkolt/vl53l0x/versions/1.0.0/readme#api
-
+7-Brett Beauregard, "Improving the Beginner’s PID – Introduction", http://brettbeauregard.com/blog/2011/04/improving-the-beginners-pid-introduction/
 
 Cosas a tomar en cuenta:
 - Los GPIO estan declarados para que el codigo sea ejecutado en un esp32s3
