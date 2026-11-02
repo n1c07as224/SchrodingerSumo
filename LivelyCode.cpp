@@ -29,6 +29,7 @@ Referencias:
 4-Del Código a la Arquitectura, "Máquinas de Estado: El patrón para eliminar los "If" anidados", https://youtu.be/sTyRxey86Jw?si=h-pryMeM7pt8JGrz 
 5-W3schools, "C++ Enumeration (enum)", https://www.w3schools.com/cpp/cpp_enum.asp
 6-Pkolt, "pkolt/vl53l0x README", https://components.espressif.com/components/pkolt/vl53l0x/versions/1.0.0/readme#api
+7- CPP Reference, "C++ Reference", https://cppreference.com/
 
 
 Cosas a tomar en cuenta:
@@ -39,8 +40,8 @@ Cosas a tomar en cuenta:
 
 */
 
-
-
+// definir conversion de encoders y conexcion
+//implementar la lectura de la velocidad de los encoders y la conversion a RPM
 
 
 //------------------------------------------SETUP------------------------------------------
@@ -62,7 +63,6 @@ Cosas a tomar en cuenta:
 #include "Hardware/distance_sensor.h"
 #include "Hardware/line_sensor.h"
 #include "Comunication/i2c.h"
-
 
 //---------------------Propiedades del robot---------------------
 // Medidas fisicas del robot
@@ -98,10 +98,7 @@ struct PID {
 PID izq = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 PID der = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
-float previous_time = 0.0f;
-float current_time = 0.0f;
-//New
-uint64_t now = 0;
+
 
 // Frecuencia en la lectura de sensores
 constexpr uint16_t dDS = 150;
@@ -109,7 +106,7 @@ constexpr uint16_t dDS_fast = 50;
 constexpr uint16_t dIMU = 150;
 constexpr uint16_t dIS = 150;
 
-
+constexpr uint32_t loop_time = 10;   // ms
 
 //---------------------Estados y prioridades---------------------
 enum State {
@@ -233,7 +230,7 @@ constexpr adc_channel_t ENC2_CH = ADC_CHANNEL_0;
 void init_gpio_adc_pwm();
 int Read_ENC1();
 int Read_ENC2();
-motor set(float izqPWM, float derPWM);
+void motor_set(float izqPWM, float derPWM);
 void updateMotors(float output_izq, float output_der);
 
 VectorDirection getStateMotor(State s){
@@ -264,9 +261,9 @@ VectorDirection getStateMotor(State s){
             return {0.0f, 0.0f};
         default:
             return {0.0f, 0.0f};
+    }
 }
-
-float PID_calc(PID &pid, int set_point, int rpm_read, float dtime) {
+float PID_calc(PID &pid, float set_point, int rpm_read, float dtime) {
 
             float error = set_point - rpm_read;
             //integral
@@ -279,7 +276,7 @@ float PID_calc(PID &pid, int set_point, int rpm_read, float dtime) {
             float result = pid.Kp * error + pid.Ki * pid.integral + pid.Kd * deriv_error;
 
             pid.previous_error = error;
-            pid.previous_time = pid.current_time;
+          
 
             return result;
         }
@@ -331,11 +328,28 @@ extern "C" void app_main(void)
     init_gpio_adc_pwm();
     DistanceS:: initAll();
 
-    unit64_t previous_time = esp_timer_get_time()/1000; //actualizar tiempo en milisegundos
+    uint64_t previous_time = esp_timer_get_time();   //actualizar tiempo anterior
 
     while(true){
-        
-        
+
+        int enc1 = Read_ENC1();
+        int enc2 = Read_ENC2();
+
+        DistanceS::distances medidas = DistanceS::readAll();
+
+        uint64_t now = esp_timer_get_time(); //actualizar tiempo ahora
+        float dTime = (now - previous_time) / 1e6f; //calcular delta tiempo en segundos
+        previous_time = now; //actualizar tiempo anterior
+
+        VectorDirection robotVelocity = getStateMotor(robotState);
+        WheelRPM wheelRPM = calculateWheelRPM(robotVelocity, r_llantas, wheelBase);
+
+        float output_izq = PID_calc(izq, wheelRPM.left, enc1, dTime);
+        float output_der = PID_calc(der, wheelRPM.right, enc2, dTime);
+        updateMotors(output_izq, output_der);
+
+        vTaskDelay(pdMS_TO_TICKS(loop_time)); //esperar loop_time
+
     }
 
 
@@ -536,14 +550,3 @@ float PID_calc(PID &pid, int set_point, int rpm_read, float dtime) {
         }*/
 
 
-while(1){
-    
-    now = esp_timer_get_time()/1000; //actualizar tiempo en milisegundos
-    float dTime = now - previous_time;
-    float output_izq = PID_calc(pidIzq, rpm_obj_izq, rpm_reading_izq, dTime);
-    float output_der = PID_calc(pidDer, rpm_obj_der, rpm_reading_der, dTime);
-    previous_time = now;
-
-    updateMotors(output_izq, output_der);
-
-}
