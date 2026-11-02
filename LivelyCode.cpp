@@ -46,6 +46,9 @@ Cosas a tomar en cuenta:
 //------------------------------------------SETUP------------------------------------------
 
 //----------------------------Librerias----------------------------
+#include <cmath>//
+#include "esp_timer.h"//
+
 #include <stdio.h>
 #include <cstdint>
 #include "driver/gpio.h"
@@ -58,28 +61,53 @@ Cosas a tomar en cuenta:
 #include "Hardware/motor.h"
 #include "Hardware/distance_sensor.h"
 #include "Hardware/line_sensor.h"
+#include "Comunication/i2c.h"
 
 
 //---------------------Propiedades del robot---------------------
 // Medidas fisicas del robot
-constexpr uint8_t r_llantas = 30;
+constexpr float r_llantas = 0.030f; // m
+constexpr float wheelBase = 0.180f; // m    MAY CHANGE I DONT KNOW
 
 // Constantes y variables matematicas
-constexpr float Kp = 0.0f;
-constexpr float Ki = 0.0f;
-constexpr float Kd = 0.0f;
+struct VectorDirection {
+    float v; //Speed  m/s
+    float w; //Angle Rad/s
+};
+
+struct WheelRPM{
+    float left;
+    float right;
+};
+
+VectorDirection target = {0.0f, 0.0f};   //0
+
+WheelRPM calculateWheelRPM(VectorDirection robotVelocity, float wheelRadius, float wheelBase) {
+    WheelRPM wheelRPM;
+    wheelRPM.left = (robotVelocity.v - (robotVelocity.w * wheelBase / 2)) / (2 * M_PI * wheelRadius) * 60; // Convert to RPM
+    wheelRPM.right = (robotVelocity.v + (robotVelocity.w * wheelBase / 2)) / (2 * M_PI * wheelRadius) * 60; // Convert to RPM
+    return wheelRPM;
+}
+struct PID {
+    float Kp;
+    float Ki;
+    float Kd;
+    float previous_error;
+    float integral;
+};
+PID izq = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+PID der = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 float previous_time = 0.0f;
 float current_time = 0.0f;
-float last_error = 0.0f;
-float integ_error = 0.0f;
+//New
+uint64_t now = 0;
 
 // Frecuencia en la lectura de sensores
 constexpr uint16_t dDS = 150;
 constexpr uint16_t dDS_fast = 50;
 constexpr uint16_t dIMU = 150;
 constexpr uint16_t dIS = 150;
-
 
 
 
@@ -169,30 +197,92 @@ constexpr ledc_channel_t MTR2_L = LEDC_CHANNEL_2;
 constexpr ledc_channel_t MTR2_R = LEDC_CHANNEL_3;
 
 // Entradas ADC
-constexpr gpio_num_t IS1_L_PIN = GPIO_NUM_3;
-constexpr gpio_num_t IS1_R_PIN = GPIO_NUM_10;
-constexpr gpio_num_t IS2_L_PIN = GPIO_NUM_19;
-constexpr gpio_num_t IS2_R_PIN = GPIO_NUM_20;
+constexpr gpio_num_t IS1_L_PIN = GPIO_NUM_39;
+constexpr gpio_num_t IS1_R_PIN = GPIO_NUM_38;
+constexpr gpio_num_t IS2_L_PIN = GPIO_NUM_42;
+constexpr gpio_num_t IS2_R_PIN = GPIO_NUM_47;
+
+// Pines Encoders
+constexpr gpio_num_t ENC1_PIN = GPIO_NUM_10;
+constexpr gpio_num_t ENC2_PIN = GPIO_NUM_11;
+
+// Pines RRTT
+constexpr gpio_num_t RDY_PIN = GPIO_NUM_45;
+constexpr gpio_num_t GO_PIN = GPIO_NUM_48;
 
 // Canales ADC
 static adc_oneshot_unit_handle_t adc1_handle = nullptr;
+static adc_oneshot_unit_handle_t adc2_handle = nullptr;
 constexpr adc_channel_t IS1_L = ADC_CHANNEL_0;
 constexpr adc_channel_t IS1_R = ADC_CHANNEL_1;
 constexpr adc_channel_t IS2_L = ADC_CHANNEL_2;
 constexpr adc_channel_t IS2_R = ADC_CHANNEL_3;
+
+// ADC Encoders
+constexpr adc_channel_t ENC1_CH = ADC_CHANNEL_9;
+constexpr adc_channel_t ENC2_CH = ADC_CHANNEL_0;
+
+
+
+
 
 
 
 
 //---------------------Inicializar funciones---------------------
 void init_gpio_adc_pwm();
+int Read_ENC1();
+int Read_ENC2();
+motor set(float izqPWM, float derPWM);
+void updateMotors(float output_izq, float output_der);
 
+VectorDirection getStateMotor(State s){
+    switch (s) {
+        case IDLE:
+            return {0.0f, 0.0f};
+        case SEARCHING:
+            return {0.5f, 0.0f};
+        case ENEMY_FOUND:
+            return {1.0f, 0.0f};
+        case ENEMY_LOST_L:
+            return {0.5f, 0.5f};
+        case ENEMY_LOST_R:
+            return {0.5f, -0.5f};
+        case PUSHING:
+            return {1.0f, 0.0f};    
+        case PUSHING_LOSING:
+            return {0.5f, 0.0f};
+        case LINE_FL:
+            return {0.0f, 0.5f};
+        case LINE_FR:
+            return {0.0f, -0.5f};
+        case LINE_RL:
+            return {0.0f, 0.5f};
+        case LINE_RR:
+            return {0.0f, -0.5f};
+        case CLOSE_TO_LINE:
+            return {0.0f, 0.0f};
+        default:
+            return {0.0f, 0.0f};
+}
 
+float PID_calc(PID &pid, int set_point, int rpm_read, float dtime) {
 
+            float error = set_point - rpm_read;
+            //integral
+            pid.integral += error * dtime;
 
+            // Derivada
+            float deriv_error = (error - pid.previous_error) / dtime;
+        
 
+            float result = pid.Kp * error + pid.Ki * pid.integral + pid.Kd * deriv_error;
 
+            pid.previous_error = error;
+            pid.previous_time = pid.current_time;
 
+            return result;
+        }
 
 
 //=======================================================MAIN-START=======================================================
@@ -202,7 +292,7 @@ extern "C" void app_main(void)
     //---------------------Configurar protocolos de comunicacion---------------------
 
     // I2C
-    i2c_master_bus_handle_t i2c_bus_handle;
+    i2c_master_bus_handle_t i2c_bus_handle = nullptr;
     i2c_master_bus_config_t i2c_bus_config = {};
     i2c_bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
     i2c_bus_config.i2c_port = I2C_NUM_0;
@@ -224,22 +314,29 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(ledc_timer_config(&timer_config));
 
     // ADC
-    adc_oneshot_unit_init_cfg_t adc_init_config = {};
-    adc_init_config.unit_id = ADC_UNIT_1;
-    adc_init_config.clk_src = ADC_RTC_CLK_SRC_DEFAULT;
-    adc_init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
+    adc_oneshot_unit_init_cfg_t adc1_init_config = {};
+    adc1_init_config.unit_id = ADC_UNIT_1;
+    adc1_init_config.clk_src = ADC_RTC_CLK_SRC_DEFAULT;
+    adc1_init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
 
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc_init_config, &adc1_handle));
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc1_init_config, &adc1_handle));
 
+    adc_oneshot_unit_init_cfg_t adc2_init_config = {};
+    adc2_init_config.unit_id = ADC_UNIT_2;
+    adc2_init_config.clk_src = ADC_RTC_CLK_SRC_DEFAULT;
+    adc2_init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc2_init_config, &adc2_handle));
 
     //---------------------Inicializar sensores y motores---------------------
     init_gpio_adc_pwm();
+    DistanceS:: initAll();
 
+    unit64_t previous_time = esp_timer_get_time()/1000; //actualizar tiempo en milisegundos
 
-
-
-
-
+    while(true){
+        
+        
+    }
 
 
 }
@@ -263,6 +360,14 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(gpio_set_direction(XSHUT_4, GPIO_MODE_OUTPUT));
     ESP_ERROR_CHECK(gpio_set_direction(XSHUT_5, GPIO_MODE_OUTPUT));
     ESP_ERROR_CHECK(gpio_set_direction(XSHUT_6, GPIO_MODE_OUTPUT));
+
+    // Apagar VL53L0X
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_1, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_2, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_3, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_4, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_5, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_6, 0));
 
     // Entradas digitales
     ESP_ERROR_CHECK(gpio_set_direction(LS_FL, GPIO_MODE_INPUT));
@@ -324,18 +429,21 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS1_R, &adc_channel_config));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS2_L, &adc_channel_config));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS2_R, &adc_channel_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ENC1_CH, &adc_channel_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc2_handle, ENC2_CH, &adc_channel_config));
 
 }
 
-void init_distance_sensors() {
+int Read_ENC1() {
+    int adc_reading = 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ENC1_CH, &adc_reading));
+    return adc_reading;
+}
 
-
-
-
-
-
-
-
+int Read_ENC2() {
+    int adc_reading = 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc2_handle, ENC2_CH, &adc_reading));
+    return adc_reading;
 }
 
 
@@ -343,21 +451,99 @@ void init_distance_sensors() {
 
 
 
-float PID_calc(int set_point, int rpm_read) {
+//ACTIONS
+void motor_set(float izqPWM, float derPWM) {
 
-    float error = set_point - rpm_read;
-    float dTime = current_time - previous_time;
+    // Implement motor control logic here MOTORS
 
-    // Integral
-    integ_error += error * dTime;
+}
 
-    // Derivada
-    float deriv_error = (error - last_error) / dTime;
+void updateMotors(float output_izq, float output_der) {
+    // Implement motor update logic here
+    // For example, you can set the PWM values for the motors based on the PID output
+    motor_set(output_izq, output_der);
+}
 
-    float result = Kp * error + Ki * integ_error + Kd * deriv_error;
+/*void execute_robotStateActions(State robotState) {
 
-    last_error = error;
-    previous_time = current_time;
+    switch (robotState) {
+    case IDLE:
+        // code 
 
-    return result;
+        break;
+
+    case SEARCHING:
+    
+
+        break;
+
+    case ENEMY_FOUND:
+    
+
+        break;
+
+    case ENEMY_LOST_L:
+    case ENEMY_LOST_R:
+    
+
+        break;
+
+    case PUSHING:
+    
+
+        break;
+
+    case PUSHING_LOSING:
+    
+
+        break;
+
+    case LINE_FL:
+    case LINE_FR:
+    case LINE_RL:
+    case LINE_RR:
+    
+
+        break;
+
+    case CLOSE_TO_LINE:
+    
+
+        break;
+
+    default:
+    
+    
+        break;
+    }
+}
+float PID_calc(PID &pid, int set_point, int rpm_read, float dtime) {
+
+            float error = set_point - rpm_read;
+            //integral
+            pid.integral += error * dtime;
+
+            // Derivada
+            float deriv_error = (error - pid.previous_error) / dtime;
+        
+
+            float result = pid.Kp * error + pid.Ki * pid.integral + pid.Kd * deriv_error;
+
+            pid.previous_error = error;
+            pid.previous_time = pid.current_time;
+
+            return result;
+        }*/
+
+
+while(1){
+    
+    now = esp_timer_get_time()/1000; //actualizar tiempo en milisegundos
+    float dTime = now - previous_time;
+    float output_izq = PID_calc(pidIzq, rpm_obj_izq, rpm_reading_izq, dTime);
+    float output_der = PID_calc(pidDer, rpm_obj_der, rpm_reading_der, dTime);
+    previous_time = now;
+
+    updateMotors(output_izq, output_der);
+
 }
