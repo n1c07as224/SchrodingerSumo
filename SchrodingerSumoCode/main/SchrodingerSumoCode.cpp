@@ -219,6 +219,16 @@ constexpr adc_channel_t IS2_R = ADC_CHANNEL_3;
 constexpr adc_channel_t ENC1_CH = ADC_CHANNEL_9;
 constexpr adc_channel_t ENC2_CH = ADC_CHANNEL_0;
 
+// Encoders I2C
+static i2c_master_bus_handle_t i2c_bus_1 = nullptr;
+static i2c_master_bus_handle_t i2c_bus_2 = nullptr;
+
+static i2c_master_dev_handle_t as5600_left = nullptr;
+static i2c_master_dev_handle_t as5600_right = nullptr;
+
+constexpr uint8_t AS5600_ADDRESS = 0x36;
+constexpr uint8_t AS5600_RAW_ANGLE_HIGH = 0x0C;
+constexpr uint8_t AS5600_RAW_ANGLE_LOW = 0x0D;
 
 
 
@@ -281,6 +291,70 @@ float PID_calc(PID &pid, float set_point, int rpm_read, float dtime) {
             return result;
         }
 
+void init_as5600();
+// Lectura de angulo de los encoders 
+uint16_t read_as5600_raw_angle(
+    i2c_master_dev_handle_t device
+)
+{
+    uint8_t register_address =
+        AS5600_RAW_ANGLE_HIGH;
+
+    uint8_t data[2] = {0, 0};
+
+    esp_err_t result =
+        i2c_master_transmit_receive(
+            device,
+            &register_address,
+            1,
+            data,
+            2,
+            100
+        );
+
+    if (result != ESP_OK) {
+        printf(
+            "Error leyendo AS5600: %s\n",
+            esp_err_to_name(result)
+        );
+
+        return 0;
+    }
+
+    uint16_t raw_angle =
+        (static_cast<uint16_t>(data[0]) << 8) |
+        static_cast<uint16_t>(data[1]);
+
+    return raw_angle & 0x0FFF;
+}
+// Conversion de angulo a grados
+float read_as5600_angle_degrees(
+    i2c_master_dev_handle_t device
+)
+{
+    uint16_t raw_angle =
+        read_as5600_raw_angle(device);
+
+    return (
+        static_cast<float>(raw_angle) *
+        360.0f /
+        4096.0f
+    );
+}
+// Funciones individuales
+float Read_ANGLE1()
+{
+    return read_as5600_angle_degrees(
+        as5600_left
+    );
+}
+
+float Read_ANGLE2()
+{
+    return read_as5600_angle_degrees(
+        as5600_right
+    );
+}
 
 //=======================================================MAIN-START=======================================================
 extern "C" void app_main(void)
@@ -289,16 +363,36 @@ extern "C" void app_main(void)
     //---------------------Configurar protocolos de comunicacion---------------------
 
     // I2C
-    i2c_master_bus_handle_t i2c_bus_handle = nullptr;
-    i2c_master_bus_config_t i2c_bus_config = {};
-    i2c_bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
-    i2c_bus_config.i2c_port = I2C_NUM_0;
-    i2c_bus_config.scl_io_num = i2c_scl_pin;
-    i2c_bus_config.sda_io_num = i2c_sda_pin;
-    i2c_bus_config.glitch_ignore_cnt = 7;
-    i2c_bus_config.flags.enable_internal_pullup = true;
+    // SDA 8 y SCL 9
+    i2c_master_bus_config_t i2c_bus_config1 = {};
+    i2c_bus_config1.clk_source = I2C_CLK_SRC_DEFAULT;
+    i2c_bus_config1.i2c_port = I2C_NUM_0;
+    i2c_bus_config1.scl_io_num = i2c_scl_pin;
+    i2c_bus_config1.sda_io_num = i2c_sda_pin;
+    i2c_bus_config1.glitch_ignore_cnt = 7;
+    i2c_bus_config1.flags.enable_internal_pullup = true;
 
-    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle));
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config1,&i2c_bus_1));
+
+
+    // SDA 4 y SCL 5
+    i2c_master_bus_config_t i2c_bus_config_2 = {};
+
+    i2c_bus_config_2.clk_source = I2C_CLK_SRC_DEFAULT;
+    i2c_bus_config_2.i2c_port = I2C_NUM_1;
+    i2c_bus_config_2.sda_io_num = i2c_sda2_pin;
+    i2c_bus_config_2.scl_io_num = i2c_scl2_pin;
+    i2c_bus_config_2.glitch_ignore_cnt = 7;
+    i2c_bus_config_2.flags.enable_internal_pullup = true;
+
+    ESP_ERROR_CHECK(
+        i2c_new_master_bus(
+            &i2c_bus_config_2,
+            &i2c_bus_2
+        )
+    );
+
+    
 
     // PWM timer
     ledc_timer_config_t timer_config{};
@@ -325,15 +419,19 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc2_init_config, &adc2_handle));
 
     //---------------------Inicializar sensores y motores---------------------
+    init_as5600();
     init_gpio_adc_pwm();
     DistanceS:: initAll();
 
     uint64_t previous_time = esp_timer_get_time();   //actualizar tiempo anterior
 
     while(true){
-
+        // Lectura ENC PWM
         int enc1 = Read_ENC1();
         int enc2 = Read_ENC2();
+        // Lectura ANGLE I2C
+        float angle1 = Read_ANGLE1();
+        float angle2 = Read_ANGLE2();
 
         DistanceS::distances medidas = DistanceS::readAll();
 
@@ -354,18 +452,6 @@ extern "C" void app_main(void)
 
 
 }
-// Encoders I2C
-static i2c_master_bus_handle_t i2c_bus_1 = nullptr;
-static i2c_master_bus_handle_t i2c_bus_2 = nullptr;
-
-static i2c_master_dev_handle_t as5600_left = nullptr;
-static i2c_master_dev_handle_t as5600_right = nullptr;
-
-constexpr uint8_t AS5600_ADDRESS = 0x36;
-
-constexpr uint8_t AS5600_RAW_ANGLE_HIGH = 0x0C;
-constexpr uint8_t AS5600_RAW_ANGLE_LOW  = 0x0D;
-
 //=======================================================MAIN-END=======================================================
 
 
@@ -461,43 +547,10 @@ void init_gpio_adc_pwm() {
 }
 void init_as5600()
 {
-    // SDA 8 y SCL 9
-    i2c_master_bus_config_t bus_config_1 = {};
-
-    bus_config_1.clk_source = I2C_CLK_SRC_DEFAULT;
-    bus_config_1.i2c_port = I2C_NUM_0;
-    bus_config_1.sda_io_num = i2c_sda_pin;
-    bus_config_1.scl_io_num = i2c_scl_pin;
-    bus_config_1.glitch_ignore_cnt = 7;
-    bus_config_1.flags.enable_internal_pullup = true;
-
-    ESP_ERROR_CHECK(
-        i2c_new_master_bus(
-            &bus_config_1,
-            &i2c_bus_1
-        )
-    );
-    // SDA 4 y SCL 5
-    i2c_master_bus_config_t bus_config_2 = {};
-
-    bus_config_2.clk_source = I2C_CLK_SRC_DEFAULT;
-    bus_config_2.i2c_port = I2C_NUM_1;
-    bus_config_2.sda_io_num = i2c_sda2_pin;
-    bus_config_2.scl_io_num = i2c_scl2_pin;
-    bus_config_2.glitch_ignore_cnt = 7;
-    bus_config_2.flags.enable_internal_pullup = true;
-
-    ESP_ERROR_CHECK(
-        i2c_new_master_bus(
-            &bus_config_2,
-            &i2c_bus_2
-        )
-    );
-
     i2c_device_config_t as5600_config = {};
 
     as5600_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    as5600_config.device_address = AS5600_ADDRESS;
+    as5600_config.device_address = 0x36;
     as5600_config.scl_speed_hz = 400000;
 
     ESP_ERROR_CHECK(
@@ -530,18 +583,7 @@ int Read_ENC2() {
     return adc_reading;
 }
 //Encoders I2C
-void init_as5600();
 
-uint16_t read_as5600_raw_angle(
-    i2c_master_dev_handle_t device
-);
-
-float read_as5600_angle_degrees(
-    i2c_master_dev_handle_t device
-);
-
-float Read_ANGLE1();
-float Read_ANGLE2();
 
 
 
