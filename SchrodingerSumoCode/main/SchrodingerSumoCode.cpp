@@ -24,55 +24,139 @@ Leonardo Zavala Angeles
 
 Referencias:
 1-Robojax, "Using Four VL53L0X Laser Distance Meters with Arduino", https://robojax.com/tutorial_view.php?lang=en&id=301#code-section-direct
-2-Descubrearduino, "Cómo hacer un PID con Arduino", https://descubrearduino.com/como-hacer-un-pid-con-arduino/
+2-GeeksforGeeks, "Understanding constexpr Specifier in C++", https://www.geeksforgeeks.org/cpp/understanding-constexper-specifier-in-cpp/
+3-Descubrearduino, "Cómo hacer un PID con Arduino", https://descubrearduino.com/como-hacer-un-pid-con-arduino/
+4-Del Código a la Arquitectura, "Máquinas de Estado: El patrón para eliminar los "If" anidados", https://youtu.be/sTyRxey86Jw?si=h-pryMeM7pt8JGrz 
+5-W3schools, "C++ Enumeration (enum)", https://www.w3schools.com/cpp/cpp_enum.asp
+6-Pkolt, "pkolt/vl53l0x README", https://components.espressif.com/components/pkolt/vl53l0x/versions/1.0.0/readme#api
+7- CPP Reference, "C++ Reference", https://cppreference.com/
 
 
 Cosas a tomar en cuenta:
 - Los GPIO estan declarados para que el codigo sea ejecutado en un esp32s3
 - Todas las medidas usan el sistema internacional de unidades
+- Todas las funciones y declaraciones encargadas del control del harware se encuentran en el directorio /Hardware
 
 
 */
 
-
-
+// definir conversion de encoders y conexcion
+//implementar la lectura de la velocidad de los encoders y la conversion a RPM
 
 
 //------------------------------------------SETUP------------------------------------------
 
 //----------------------------Librerias----------------------------
+#include <cmath>//
+#include "esp_timer.h"//
+
 #include <stdio.h>
 #include <cstdint>
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
-#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-
+#include "Hardware/motor.h"
+#include "Hardware/distance_sensor.h"
+#include "Hardware/line_sensor.h"
+#include "Comunication/i2c.h"
 
 //---------------------Propiedades del robot---------------------
-// Medidas fisicas
-constexpr uint8_t r_llantas = 30;
+// Medidas fisicas del robot
+constexpr float r_llantas = 0.030f; // m
+constexpr float wheelBase = 0.180f; // m    MAY CHANGE I DONT KNOW
 
 // Constantes y variables matematicas
-constexpr float Kp = 0.0f;
-constexpr float Ki = 0.0f;
-constexpr float Kd = 0.0f;
+struct VectorDirection {
+    float v; //Speed  m/s
+    float w; //Angle Rad/s
+};
 
-float previous_time = 0.0f;
-float current_time = 0.0f;
-float last_error = 0.0f;
-float integ_error = 0.0f;
+struct WheelRPM{
+    float left;
+    float right;
+};
+
+VectorDirection target = {0.0f, 0.0f};   //0
+
+WheelRPM calculateWheelRPM(VectorDirection robotVelocity, float wheelRadius, float wheelBase) {
+    WheelRPM wheelRPM;
+    wheelRPM.left = (robotVelocity.v - (robotVelocity.w * wheelBase / 2)) / (2 * M_PI * wheelRadius) * 60; // Convert to RPM
+    wheelRPM.right = (robotVelocity.v + (robotVelocity.w * wheelBase / 2)) / (2 * M_PI * wheelRadius) * 60; // Convert to RPM
+    return wheelRPM;
+}
+struct PID {
+    float Kp;
+    float Ki;
+    float Kd;
+    float previous_error;
+    float integral;
+};
+PID izq = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+PID der = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 
-// Lectura de sensores
+
+// Frecuencia en la lectura de sensores
 constexpr uint16_t dDS = 150;
 constexpr uint16_t dDS_fast = 50;
 constexpr uint16_t dIMU = 150;
 constexpr uint16_t dIS = 150;
+
+constexpr uint32_t loop_time = 10;   // ms
+
+//---------------------Estados y prioridades---------------------
+enum State {
+
+    IDLE,
+    SEARCHING,
+    ENEMY_FOUND,
+    ENEMY_LOST_L,
+    ENEMY_LOST_R,
+    PUSHING,
+    PUSHING_LOSING,
+    LINE_FL,
+    LINE_FR,
+    LINE_RL,
+    LINE_RR,
+    CLOSE_TO_LINE,
+    COUNT
+
+};
+
+// Prioridad que tiene cada estado
+struct StateConfig {
+
+    int state_num;
+    int state_priority;
+
+};
+
+constexpr StateConfig robotStatePriority[COUNT] {
+
+    {IDLE, 5},
+    {SEARCHING, 1},
+    {ENEMY_FOUND, 2},
+    {ENEMY_LOST_L, 2},
+    {ENEMY_LOST_R, 2},
+    {PUSHING, 2},
+    {PUSHING_LOSING, 3},
+    {LINE_FL, 4},
+    {LINE_FR, 4},
+    {LINE_RL, 4},
+    {LINE_RR, 4},
+    {CLOSE_TO_LINE, 1}
+
+};
+
+// Historial de estados
+State robotState = IDLE;
+State lastRobotState = IDLE;
+State beforeLastRobotState = IDLE;
+
 
 
 
@@ -110,45 +194,92 @@ constexpr ledc_channel_t MTR2_L = LEDC_CHANNEL_2;
 constexpr ledc_channel_t MTR2_R = LEDC_CHANNEL_3;
 
 // Entradas ADC
-constexpr gpio_num_t IS1_L_PIN = GPIO_NUM_3;
-constexpr gpio_num_t IS1_R_PIN = GPIO_NUM_10;
-constexpr gpio_num_t IS2_L_PIN = GPIO_NUM_19;
-constexpr gpio_num_t IS2_R_PIN = GPIO_NUM_20;
+constexpr gpio_num_t IS1_L_PIN = GPIO_NUM_39;
+constexpr gpio_num_t IS1_R_PIN = GPIO_NUM_38;
+constexpr gpio_num_t IS2_L_PIN = GPIO_NUM_42;
+constexpr gpio_num_t IS2_R_PIN = GPIO_NUM_47;
+
+// Pines Encoders
+constexpr gpio_num_t ENC1_PIN = GPIO_NUM_10;
+constexpr gpio_num_t ENC2_PIN = GPIO_NUM_11;
+
+// Pines RRTT
+constexpr gpio_num_t RDY_PIN = GPIO_NUM_45;
+constexpr gpio_num_t GO_PIN = GPIO_NUM_48;
 
 // Canales ADC
 static adc_oneshot_unit_handle_t adc1_handle = nullptr;
+static adc_oneshot_unit_handle_t adc2_handle = nullptr;
 constexpr adc_channel_t IS1_L = ADC_CHANNEL_0;
 constexpr adc_channel_t IS1_R = ADC_CHANNEL_1;
 constexpr adc_channel_t IS2_L = ADC_CHANNEL_2;
 constexpr adc_channel_t IS2_R = ADC_CHANNEL_3;
 
+// ADC Encoders
+constexpr adc_channel_t ENC1_CH = ADC_CHANNEL_9;
+constexpr adc_channel_t ENC2_CH = ADC_CHANNEL_0;
 
-//---------------------Estados---------------------
-struct FlagsState {
 
-    bool waiting = true;
-    uint8_t searching = 0; // 0= no buscar, 1= buscando, 2= buscar en la izquierda, 3= buscar en la derecha
-    bool enemy_found = false;
-    uint8_t pushing = 0; // 0= no empujando, 1= empujando, 2= empujando y perdiendo
-    uint8_t line = 0; //0= sin linea, 1= linea trasera izquierda, 2= linea trasera derecha, 3= linea frontal izquierda, 4= linea frontal derecha, 5= sensor trasero detecta linea proxima
 
-};
+
+
 
 
 
 //---------------------Inicializar funciones---------------------
 void init_gpio_adc_pwm();
+int Read_ENC1();
+int Read_ENC2();
+void motor_set(float izqPWM, float derPWM);
+void updateMotors(float output_izq, float output_der);
 
-//---------------------Funciones de movimiento---------------------
-void set_motor(int motor, int speed);
-void stop_motors();
-void move_forward(uint8_t speed);
-void move_backward(uint8_t speed);
-void turn_left(uint8_t speed);
-void turn_right(uint8_t speed);
-void rotate_left(uint8_t speed);
-void rotate_right(uint8_t speed);
-void execute_movement(const FlagsState& flags);
+VectorDirection getStateMotor(State s){
+    switch (s) {
+        case IDLE:
+            return {0.0f, 0.0f};
+        case SEARCHING:
+            return {0.5f, 0.0f};
+        case ENEMY_FOUND:
+            return {1.0f, 0.0f};
+        case ENEMY_LOST_L:
+            return {0.5f, 0.5f};
+        case ENEMY_LOST_R:
+            return {0.5f, -0.5f};
+        case PUSHING:
+            return {1.0f, 0.0f};    
+        case PUSHING_LOSING:
+            return {0.5f, 0.0f};
+        case LINE_FL:
+            return {0.0f, 0.5f};
+        case LINE_FR:
+            return {0.0f, -0.5f};
+        case LINE_RL:
+            return {0.0f, 0.5f};
+        case LINE_RR:
+            return {0.0f, -0.5f};
+        case CLOSE_TO_LINE:
+            return {0.0f, 0.0f};
+        default:
+            return {0.0f, 0.0f};
+    }
+}
+float PID_calc(PID &pid, float set_point, int rpm_read, float dtime) {
+
+            float error = set_point - rpm_read;
+            //integral
+            pid.integral += error * dtime;
+
+            // Derivada
+            float deriv_error = (error - pid.previous_error) / dtime;
+        
+
+            float result = pid.Kp * error + pid.Ki * pid.integral + pid.Kd * deriv_error;
+
+            pid.previous_error = error;
+          
+
+            return result;
+        }
 
 
 //=======================================================MAIN-START=======================================================
@@ -158,7 +289,7 @@ extern "C" void app_main(void)
     //---------------------Configurar protocolos de comunicacion---------------------
 
     // I2C
-    i2c_master_bus_handle_t i2c_bus_handle;
+    i2c_master_bus_handle_t i2c_bus_handle = nullptr;
     i2c_master_bus_config_t i2c_bus_config = {};
     i2c_bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
     i2c_bus_config.i2c_port = I2C_NUM_0;
@@ -167,7 +298,7 @@ extern "C" void app_main(void)
     i2c_bus_config.glitch_ignore_cnt = 7;
     i2c_bus_config.flags.enable_internal_pullup = true;
 
-    i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle);
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle));
 
     // PWM timer
     ledc_timer_config_t timer_config{};
@@ -177,35 +308,64 @@ extern "C" void app_main(void)
     timer_config.freq_hz = 5000;
     timer_config.clk_cfg = LEDC_AUTO_CLK;
 
-    ledc_timer_config(&timer_config);
+    ESP_ERROR_CHECK(ledc_timer_config(&timer_config));
 
     // ADC
-    adc_oneshot_unit_init_cfg_t adc_init_config = {};
-    adc_init_config.unit_id = ADC_UNIT_1;
-    adc_init_config.clk_src = ADC_RTC_CLK_SRC_DEFAULT;
-    adc_init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
+    adc_oneshot_unit_init_cfg_t adc1_init_config = {};
+    adc1_init_config.unit_id = ADC_UNIT_1;
+    adc1_init_config.clk_src = ADC_RTC_CLK_SRC_DEFAULT;
+    adc1_init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
 
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc_init_config, &adc1_handle));
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc1_init_config, &adc1_handle));
 
+    adc_oneshot_unit_init_cfg_t adc2_init_config = {};
+    adc2_init_config.unit_id = ADC_UNIT_2;
+    adc2_init_config.clk_src = ADC_RTC_CLK_SRC_DEFAULT;
+    adc2_init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc2_init_config, &adc2_handle));
 
     //---------------------Inicializar sensores y motores---------------------
     init_gpio_adc_pwm();
+    DistanceS:: initAll();
 
-    // Actualizar Flags
-    FlagsState flags{};
-    while (true) {
-        execute_movement(flags);
-        vTaskDelay(pdMS_TO_TICKS(10));
+    uint64_t previous_time = esp_timer_get_time();   //actualizar tiempo anterior
+
+    while(true){
+
+        int enc1 = Read_ENC1();
+        int enc2 = Read_ENC2();
+
+        DistanceS::distances medidas = DistanceS::readAll();
+
+        uint64_t now = esp_timer_get_time(); //actualizar tiempo ahora
+        float dTime = (now - previous_time) / 1e6f; //calcular delta tiempo en segundos
+        previous_time = now; //actualizar tiempo anterior
+
+        VectorDirection robotVelocity = getStateMotor(robotState);
+        WheelRPM wheelRPM = calculateWheelRPM(robotVelocity, r_llantas, wheelBase);
+
+        float output_izq = PID_calc(izq, wheelRPM.left, enc1, dTime);
+        float output_der = PID_calc(der, wheelRPM.right, enc2, dTime);
+        updateMotors(output_izq, output_der);
+
+        vTaskDelay(pdMS_TO_TICKS(loop_time)); //esperar loop_time
+
     }
 
 
-
-
-
-
-
-
 }
+// Encoders I2C
+static i2c_master_bus_handle_t i2c_bus_1 = nullptr;
+static i2c_master_bus_handle_t i2c_bus_2 = nullptr;
+
+static i2c_master_dev_handle_t as5600_left = nullptr;
+static i2c_master_dev_handle_t as5600_right = nullptr;
+
+constexpr uint8_t AS5600_ADDRESS = 0x36;
+
+constexpr uint8_t AS5600_RAW_ANGLE_HIGH = 0x0C;
+constexpr uint8_t AS5600_RAW_ANGLE_LOW  = 0x0D;
+
 //=======================================================MAIN-END=======================================================
 
 
@@ -220,21 +380,29 @@ extern "C" void app_main(void)
 void init_gpio_adc_pwm() {
 
     // Salidas digitales
-    gpio_set_direction(XSHUT_1, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_2, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_3, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_4, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_5, GPIO_MODE_OUTPUT);
-    gpio_set_direction(XSHUT_6, GPIO_MODE_OUTPUT);
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_1, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_2, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_3, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_4, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_5, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(XSHUT_6, GPIO_MODE_OUTPUT));
+
+    // Apagar VL53L0X
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_1, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_2, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_3, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_4, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_5, 0));
+    ESP_ERROR_CHECK(gpio_set_level(XSHUT_6, 0));
 
     // Entradas digitales
-    gpio_set_direction(LS_FL, GPIO_MODE_INPUT);
-    gpio_set_direction(LS_FR, GPIO_MODE_INPUT);
-    gpio_set_direction(LS_RL, GPIO_MODE_INPUT);
-    gpio_set_direction(LS_RR, GPIO_MODE_INPUT);
+    ESP_ERROR_CHECK(gpio_set_direction(LS_FL, GPIO_MODE_INPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(LS_FR, GPIO_MODE_INPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(LS_RL, GPIO_MODE_INPUT));
+    ESP_ERROR_CHECK(gpio_set_direction(LS_RR, GPIO_MODE_INPUT));
 
     // Salidas PWM
-    ledc_channel_config_t MTR1_L_Config{};  // Avance motor 1
+    ledc_channel_config_t MTR1_L_Config{};
     MTR1_L_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR1_L_Config.channel = MTR1_L;
     MTR1_L_Config.timer_sel = LEDC_TIMER_0;
@@ -245,7 +413,7 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(ledc_channel_config(&MTR1_L_Config));
 
 
-    ledc_channel_config_t MTR1_R_Config{};  // Reversa motor 1
+    ledc_channel_config_t MTR1_R_Config{};
     MTR1_R_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR1_R_Config.channel = MTR1_R;
     MTR1_R_Config.timer_sel = LEDC_TIMER_0;
@@ -256,7 +424,7 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(ledc_channel_config(&MTR1_R_Config));
 
 
-    ledc_channel_config_t MTR2_L_Config{};  // Avance motor 2
+    ledc_channel_config_t MTR2_L_Config{};
     MTR2_L_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR2_L_Config.channel = MTR2_L;
     MTR2_L_Config.timer_sel = LEDC_TIMER_0;
@@ -267,7 +435,7 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(ledc_channel_config(&MTR2_L_Config));
 
 
-    ledc_channel_config_t MTR2_R_Config{};  // Reversa motor 2
+    ledc_channel_config_t MTR2_R_Config{};
     MTR2_R_Config.speed_mode = LEDC_LOW_SPEED_MODE;
     MTR2_R_Config.channel = MTR2_R;
     MTR2_R_Config.timer_sel = LEDC_TIMER_0;
@@ -287,159 +455,180 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS1_R, &adc_channel_config));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS2_L, &adc_channel_config));
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, IS2_R, &adc_channel_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ENC1_CH, &adc_channel_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc2_handle, ENC2_CH, &adc_channel_config));
+
+}
+void init_as5600()
+{
+    // SDA 8 y SCL 9
+    i2c_master_bus_config_t bus_config_1 = {};
+
+    bus_config_1.clk_source = I2C_CLK_SRC_DEFAULT;
+    bus_config_1.i2c_port = I2C_NUM_0;
+    bus_config_1.sda_io_num = i2c_sda_pin;
+    bus_config_1.scl_io_num = i2c_scl_pin;
+    bus_config_1.glitch_ignore_cnt = 7;
+    bus_config_1.flags.enable_internal_pullup = true;
+
+    ESP_ERROR_CHECK(
+        i2c_new_master_bus(
+            &bus_config_1,
+            &i2c_bus_1
+        )
+    );
+    // SDA 4 y SCL 5
+    i2c_master_bus_config_t bus_config_2 = {};
+
+    bus_config_2.clk_source = I2C_CLK_SRC_DEFAULT;
+    bus_config_2.i2c_port = I2C_NUM_1;
+    bus_config_2.sda_io_num = i2c_sda2_pin;
+    bus_config_2.scl_io_num = i2c_scl2_pin;
+    bus_config_2.glitch_ignore_cnt = 7;
+    bus_config_2.flags.enable_internal_pullup = true;
+
+    ESP_ERROR_CHECK(
+        i2c_new_master_bus(
+            &bus_config_2,
+            &i2c_bus_2
+        )
+    );
+
+    i2c_device_config_t as5600_config = {};
+
+    as5600_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    as5600_config.device_address = AS5600_ADDRESS;
+    as5600_config.scl_speed_hz = 400000;
+
+    ESP_ERROR_CHECK(
+        i2c_master_bus_add_device(
+            i2c_bus_1,
+            &as5600_config,
+            &as5600_left
+        )
+    );
+
+    ESP_ERROR_CHECK(
+        i2c_master_bus_add_device(
+            i2c_bus_2,
+            &as5600_config,
+            &as5600_right
+        )
+    );
+}
+
+//Encoders ADC
+int Read_ENC1() {
+    int adc_reading = 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ENC1_CH, &adc_reading));
+    return adc_reading;
+}
+
+int Read_ENC2() {
+    int adc_reading = 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc2_handle, ENC2_CH, &adc_reading));
+    return adc_reading;
+}
+//Encoders I2C
+void init_as5600();
+
+uint16_t read_as5600_raw_angle(
+    i2c_master_dev_handle_t device
+);
+
+float read_as5600_angle_degrees(
+    i2c_master_dev_handle_t device
+);
+
+float Read_ANGLE1();
+float Read_ANGLE2();
+
+
+
+
+
+
+//ACTIONS
+void motor_set(float izqPWM, float derPWM) {
+
+    // Implement motor control logic here MOTORS
 
 }
 
+void updateMotors(float output_izq, float output_der) {
+    // Implement motor update logic here
+    // For example, you can set the PWM values for the motors based on the PID output
+    motor_set(output_izq, output_der);
+}
 
-//---------------------Control de motores---------------------
-void set_motor(int motor, int speed) {
-    speed = (speed > 255) ? 255 : speed;
-    speed = (speed < -255) ? -255 : speed;
+/*void execute_robotStateActions(State robotState) {
 
-    // Selección de canales PWM según el motor
-    if(motor == 1) { // Motor1
-        ledc_channel_t forward_channel = MTR1_L;
-        ledc_channel_t reverse_channel = MTR1_R;
-    } else if(motor == 2) { // Motor2
-        ledc_channel_t forward_channel = MTR2_L;
-        ledc_channel_t reverse_channel = MTR2_R;
-    } else {
-        return; // Motor inválido
-    }
-    // Conversión de velocidad a PWM
-    if (speed > 0) {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, static_cast<uint32_t>(speed));
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, 0);
-    } else if (speed < 0) {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, 0);
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, static_cast<uint32_t>(-speed));
-    } else {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, 0);
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, 0);
-    }
+    switch (robotState) {
+    case IDLE:
+        // code 
 
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, forward_channel, forward_duty);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, forward_channel);
+        break;
+
+    case SEARCHING:
     
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, reverse_channel, reverse_duty);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, reverse_channel);
-}
 
-void stop_motors() {
-    set_motor(1, 0);
-    set_motor(2, 0);
-}
+        break;
 
-void move_forward(uint8_t speed) {
-    set_motor(1, speed);
-    set_motor(2, speed);
-}
+    case ENEMY_FOUND:
+    
 
-void move_backward(uint8_t speed) {
-    set_motor(1, -static_cast<int>(speed));
-    set_motor(2, -static_cast<int>(speed));
-}
+        break;
 
-// Rotar
-void rotate_left(uint8_t speed) {
-    set_motor(1, -static_cast<int>(speed));
-    set_motor(2, speed);
-}
+    case ENEMY_LOST_L:
+    case ENEMY_LOST_R:
+    
 
-void rotate_right(uint8_t speed) {
-    set_motor(1, speed);
-    set_motor(2, -static_cast<int>(speed));
-}
+        break;
 
-// Giro
-void turn_left(uint8_t speed) {
-    set_motor(1, 0);
-    set_motor(2, speed);
-}
+    case PUSHING:
+    
 
-void turn_right(uint8_t speed) {
-    set_motor(1, speed);
-    set_motor(2, 0);
-}
+        break;
 
-void execute_movement(const FlagsState& flags) {
-    constexpr uint8_t SPEED_SEARCH = 100;
-    constexpr uint8_t SPEED_FORWARD = 180;
-    constexpr uint8_t SPEED_PUSH = 255;
-    constexpr uint8_t SPEED_ESCAPE = 210;
+    case PUSHING_LOSING:
+    
 
-    switch (flags.line) {
-        case 1: // Línea trasera izquierda
-            set_motor(1, SPEED_ESCAPE);
-            set_motor(2, SPEED_FORWARD);
-            return;
-        case 2: // Línea trasera derecha
-            set_motor(1, SPEED_FORWARD);
-            set_motor(2, SPEED_ESCAPE);
-            return;
-        case 3: // Línea frontal izquierda
-            set_motor(1, -static_cast<int>(SPEED_ESCAPE));
-            set_motor(2, -static_cast<int>(SPEED_FORWARD));
-            return;
-        case 4: // Línea frontal derecha
-            set_motor(1, -static_cast<int>(SPEED_FORWARD));
-            set_motor(2, -static_cast<int>(SPEED_ESCAPE));
-            return;
-        case 5: // Línea próxima al sensor trasero.
-            move_forward(SPEED_ESCAPE);
-            return;
-        default:
-            break;
-    }
+        break;
 
-    if (flags.pushing == 2) {
-        if (flags.searching == 2) {
-            rotate_left(SPEED_SEARCH);
-        } else if (flags.searching == 3) {
-            rotate_right(SPEED_SEARCH);
-        } else {
-            move_forward(SPEED_FORWARD);
-        }
-        return;
-    }
+    case LINE_FL:
+    case LINE_FR:
+    case LINE_RL:
+    case LINE_RR:
+    
 
-    if (flags.enemy_found || flags.pushing == 1) {
-        move_forward(SPEED_PUSH);
-        return;
-    }
+        break;
 
-    switch (flags.searching) {
-        case 2:
-            rotate_left(SPEED_SEARCH);
-            return;
-        case 3:
-            rotate_right(SPEED_SEARCH);
-            return;
-        case 1:
-            rotate_right(SPEED_SEARCH);
-            return;
-        default:
-            stop_motors();
-            return;
+    case CLOSE_TO_LINE:
+    
+
+        break;
+
+    default:
+    
+    
+        break;
     }
 }
+float PID_calc(PID &pid, int set_point, int rpm_read, float dtime) {
 
+            float error = set_point - rpm_read;
+            //integral
+            pid.integral += error * dtime;
 
-float PID_calc(int set_point, int rpm_read) {
+            // Derivada
+            float deriv_error = (error - pid.previous_error) / dtime;
+        
 
-    float error = set_point - rpm_read;
-    float dTime = current_time - previous_time;
+            float result = pid.Kp * error + pid.Ki * pid.integral + pid.Kd * deriv_error;
 
-    // Integral
-    integ_error += error * dTime;
+            pid.previous_error = error;
+            pid.previous_time = pid.current_time;
 
-    // Derivada
-    float deriv_error = (dTime > 0.0f) ? (error - last_error) / dTime : 0.0f;
+            return result;
+        }*/
 
-    float result = Kp * error + Ki * integ_error + Kd * deriv_error;
-
-    last_error = error;
-    previous_time = current_time;
-
-    return result;
-}
