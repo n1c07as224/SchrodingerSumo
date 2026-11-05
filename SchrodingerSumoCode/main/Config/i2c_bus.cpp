@@ -1,3 +1,4 @@
+#include "driver/i2c_master"
 #include "i2c.h"
 
 namespace I2CBus {
