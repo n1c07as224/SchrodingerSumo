@@ -82,21 +82,26 @@ struct WheelRPM{
 
 VectorDirection target = {0.0f, 0.0f};   //0
 
-WheelRPM calculateWheelRPM(VectorDirection robotVelocity, float wheelRadius, float wheelBase) {
-    WheelRPM wheelRPM;
-    wheelRPM.left = (robotVelocity.v - (robotVelocity.w * wheelBase / 2)) / (2 * M_PI * wheelRadius) * 60; // Convert to RPM
-    wheelRPM.right = (robotVelocity.v + (robotVelocity.w * wheelBase / 2)) / (2 * M_PI * wheelRadius) * 60; // Convert to RPM
-    return wheelRPM;
-}
+
 struct PID {
     float Kp;
     float Ki;
     float Kd;
     float previous_error;
+    float previous_measurement;
     float integral;
 };
-PID izq = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-PID der = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+ 
+PID izq = {0.30f, 1.00f, 0.00f, 0.0f, 0.0f, 0.0f};
+PID der = {0.30f, 1.00f, 0.00f, 0.0f, 0.0f, 0.0f};
+ 
+void PID_reset(PID &pid) {
+    pid.previous_error = 0.0f;
+    pid.previous_measurement = 0.0f;
+    pid.integral = 0.0f;
+}
+ 
+// error = set_point - medicion (ambos en RPM). Devuelve correccion en PWM, limitada a +-out_limit.
 
 
 
@@ -107,6 +112,47 @@ constexpr uint16_t dIMU = 150;
 constexpr uint16_t dIS = 150;
 
 constexpr uint32_t loop_time = 10;   // ms
+
+constexpr float PWM_MAX            = 255.0f;   // LEDC a 8 bits
+constexpr float MAX_WHEEL_RPM      = 400.0f;   // TODO: medir RPM maximas reales a 100% PWM
+constexpr float K_FF               = PWM_MAX / MAX_WHEEL_RPM; // feedforward (PWM por RPM)
+constexpr float RPM_LIMIT_CMD      = MAX_WHEEL_RPM * 0.9f;    // deja margen al PID
+constexpr float RPM_FILTER_ALPHA   = 0.3f;     // filtro exponencial (0..1, menor = mas suave)
+ 
+// Relacion entre el eje del encoder y la rueda (1.0 si el AS5600 esta en la rueda)
+constexpr float ENC_TO_WHEEL_RATIO = 1.0f;
+// Signo de cada encoder (el motor derecho suele estar espejado). Ajustar al probar.
+constexpr float ENC_SIGN_L         = 1.0f;
+constexpr float ENC_SIGN_R         = -1.0f;
+ 
+// Limites de aceleracion del vector (rampa). Poner valores muy altos para desactivar.
+constexpr float V_ACCEL_MAX        = 4.0f;     // m/s^2
+constexpr float W_ACCEL_MAX        = 30.0f;    // rad/s^2
+ 
+constexpr float W_MAX              = 6.0f;     // rad/s maximo al seguir un objetivo
+ 
+static inline float clampf(float x, float lo, float hi) {
+    return x < lo ? lo : (x > hi ? hi : x);
+}
+WheelRPM calculateWheelRPM(VectorDirection vel, float wheelRadius, float wheelBase) {
+    const float k = 60.0f / (2.0f * (float)M_PI * wheelRadius);   
+    WheelRPM out;
+    out.left  = (vel.v - vel.w * wheelBase * 0.5f) * k;
+    out.right = (vel.v + vel.w * wheelBase * 0.5f) * k;
+
+    float maxAbs = fmaxf(fabsf(out.left), fabsf(out.right));
+    if (maxAbs > RPM_LIMIT_CMD) {
+        float s = RPM_LIMIT_CMD / maxAbs;
+        out.left  *= s;
+        out.right *= s;
+    }
+    return out;
+}
+VectorDirection rampVector(VectorDirection current, VectorDirection target, float dt) {
+    current.v += clampf(target.v - current.v, -V_ACCEL_MAX * dt, V_ACCEL_MAX * dt);
+    current.w += clampf(target.w - current.w, -W_ACCEL_MAX * dt, W_ACCEL_MAX * dt);
+    return current;
+}
 
 //---------------------Estados y prioridades---------------------
 enum State {
@@ -273,23 +319,39 @@ VectorDirection getStateMotor(State s){
             return {0.0f, 0.0f};
     }
 }
-float PID_calc(PID &pid, float set_point, int rpm_read, float dtime) {
-
-            float error = set_point - rpm_read;
-            //integral
-            pid.integral += error * dtime;
-
-            // Derivada
-            float deriv_error = (error - pid.previous_error) / dtime;
-        
-
-            float result = pid.Kp * error + pid.Ki * pid.integral + pid.Kd * deriv_error;
-
-            pid.previous_error = error;
-          
-
-            return result;
-        }
+float PID_calc(PID &pid, float set_point, float measured, float dtime, float out_limit) {
+ 
+    if (dtime <= 0.0f) return 0.0f;     // evita division entre cero
+ 
+    float error = set_point - measured;
+ 
+    // Proporcional
+    float p = pid.Kp * error;
+ 
+    // Derivada sobre la medicion (evita "derivative kick" cuando cambia el set_point)
+    float d = -pid.Kd * (measured - pid.previous_measurement) / dtime;
+ 
+    // Integral tentativa
+    float integral_candidate = pid.integral + error * dtime;
+    float i = pid.Ki * integral_candidate;
+ 
+    float unsat = p + i + d;
+    float sat   = clampf(unsat, -out_limit, out_limit);
+ 
+    // Anti-windup: solo acumula si no esta saturado, o si el error ayuda a salir de la saturacion
+    bool saturated_high = unsat >  out_limit;
+    bool saturated_low  = unsat < -out_limit;
+    if ((!saturated_high && !saturated_low) ||
+        (saturated_high && error < 0.0f) ||
+        (saturated_low  && error > 0.0f)) {
+        pid.integral = integral_candidate;
+    }
+ 
+    pid.previous_error = error;
+    pid.previous_measurement = measured;
+ 
+    return sat;
+}
 
 void init_as5600();
 // Lectura de angulo de los encoders 
@@ -354,6 +416,30 @@ float Read_ANGLE2()
     return read_as5600_angle_degrees(
         as5600_right
     );
+}
+struct WheelEncoder {
+    float last_angle = 0.0f;
+    float rpm        = 0.0f;
+    bool  initialized = false;
+};
+WheelEncoder encL, encR;
+
+float update_wheel_rpm(WheelEncoder &e, float angle_deg, float sign, float dt) {
+    if (!e.initialized) {
+        e.last_angle = angle_deg;
+        e.initialized = true;
+        return 0.0f;
+    }
+    if (dt <= 0.0f) return e.rpm;
+
+    float delta = angle_deg - e.last_angle;
+    if (delta >  180.0f) delta -= 360.0f;     // cruce de 360 -> 0
+    if (delta < -180.0f) delta += 360.0f;     // cruce de 0 -> 360
+    e.last_angle = angle_deg;
+
+    float rpm_raw = (delta / 360.0f) / dt * 60.0f * sign * ENC_TO_WHEEL_RATIO;
+    e.rpm += RPM_FILTER_ALPHA * (rpm_raw - e.rpm);   // filtro exponencial
+    return e.rpm;
 }
 
 //=======================================================MAIN-START=======================================================
@@ -423,31 +509,41 @@ extern "C" void app_main(void)
     init_gpio_adc_pwm();
     DistanceS:: initAll();
 
-    uint64_t previous_time = esp_timer_get_time();   //actualizar tiempo anterior
+    uint64_t previous_time = esp_timer_get_time();   
+    VectorDirection currentVec = {0.0f, 0.0f};            
 
-    while(true){
-        // Lectura ENC PWM
-        int enc1 = Read_ENC1();
-        int enc2 = Read_ENC2();
-        // Lectura ANGLE I2C
-        float angle1 = Read_ANGLE1();
-        float angle2 = Read_ANGLE2();
+    while (true) {
+        uint64_t now = esp_timer_get_time();
+        float dTime = (now - previous_time) / 1e6f;
+        previous_time = now;
+
+        //RPM
+        float rpmL = update_wheel_rpm(encL, Read_ANGLE1(), ENC_SIGN_L, dTime);
+        float rpmR = update_wheel_rpm(encR, Read_ANGLE2(), ENC_SIGN_R, dTime);
 
         DistanceS::distances medidas = DistanceS::readAll();
+        
+        // Vector objetivo
+        VectorDirection targetVec = getStateMotor(robotState);
+        currentVec = rampVector(currentVec, targetVec, dTime);
+        WheelRPM sp = calculateWheelRPM(currentVec, r_llantas, wheelBase);
 
-        uint64_t now = esp_timer_get_time(); //actualizar tiempo ahora
-        float dTime = (now - previous_time) / 1e6f; //calcular delta tiempo en segundos
-        previous_time = now; //actualizar tiempo anterior
+        // Control PID
+        constexpr float PID_LIMIT = PWM_MAX * 0.5f;   
+        float pwmL = K_FF * sp.left  + PID_calc(izq, sp.left,  rpmL, dTime, PID_LIMIT);
+        float pwmR = K_FF * sp.right + PID_calc(der, sp.right, rpmR, dTime, PID_LIMIT);
 
-        VectorDirection robotVelocity = getStateMotor(robotState);
-        WheelRPM wheelRPM = calculateWheelRPM(robotVelocity, r_llantas, wheelBase);
+        // IDLE
+        if (robotState == IDLE) {
+            PID_reset(izq);
+            PID_reset(der);
+            pwmL = 0.0f;
+            pwmR = 0.0f;
+        }
 
-        float output_izq = PID_calc(izq, wheelRPM.left, enc1, dTime);
-        float output_der = PID_calc(der, wheelRPM.right, enc2, dTime);
-        updateMotors(output_izq, output_der);
+        updateMotors(pwmL, pwmR);
 
-        vTaskDelay(pdMS_TO_TICKS(loop_time)); //esperar loop_time
-
+        vTaskDelay(pdMS_TO_TICKS(loop_time));
     }
 
 
@@ -591,18 +687,31 @@ int Read_ENC2() {
 
 
 //ACTIONS
+constexpr float MIN_PWM = 20.0f;   // Ajustar
+
+static void pwm_write(ledc_channel_t ch, uint32_t duty) {
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, ch, duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, ch);
+}
+
+// fwdCh = RPWM, revCh = LPWM
+static void driver_write(ledc_channel_t fwdCh, ledc_channel_t revCh, float pwm) {
+    pwm = clampf(pwm, -PWM_MAX, PWM_MAX);
+    if (fabsf(pwm) < MIN_PWM) pwm = 0.0f;
+    uint32_t duty = (uint32_t)fabsf(pwm);
+
+    if (pwm >= 0.0f) { pwm_write(revCh, 0);    pwm_write(fwdCh, duty); }
+    else             { pwm_write(fwdCh, 0);    pwm_write(revCh, duty); }
+}
+
 void motor_set(float izqPWM, float derPWM) {
-
-    // Implement motor control logic here MOTORS
-
+    driver_write(MTR1_R, MTR1_L, izqPWM);   // izquierdo
+    driver_write(MTR2_R, MTR2_L, derPWM);   // derecho
 }
 
-void updateMotors(float output_izq, float output_der) {
-    // Implement motor update logic here
-    // For example, you can set the PWM values for the motors based on the PID output
-    motor_set(output_izq, output_der);
+void updateMotors(float pwm_izq, float pwm_der) {
+    motor_set(pwm_izq, pwm_der);
 }
-
 /*void execute_robotStateActions(State robotState) {
 
     switch (robotState) {
