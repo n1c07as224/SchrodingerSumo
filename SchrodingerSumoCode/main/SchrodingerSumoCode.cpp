@@ -69,10 +69,10 @@ Cosas a tomar en cuenta:
 constexpr float r_llantas = 0.030f; // m
 constexpr float wheelBase = 0.180f; // m    MAY CHANGE I DONT KNOW
 
-// Constantes y variables matematicas
+// Constantes de vectores
 struct VectorDirection {
-    float v; //Speed  m/s
-    float w; //Angle Rad/s
+    float v; //Velocidad
+    float w; //Velocidad angular
 };
 
 struct WheelRPM{
@@ -80,7 +80,7 @@ struct WheelRPM{
     float right;
 };
 
-VectorDirection target = {0.0f, 0.0f};   //0
+VectorDirection target = {0.0f, 0.0f};
 
 
 struct PID {
@@ -111,26 +111,27 @@ constexpr uint16_t dDS_fast = 50;
 constexpr uint16_t dIMU = 150;
 constexpr uint16_t dIS = 150;
 
-constexpr uint32_t loop_time = 10;   // ms
+constexpr uint32_t loop_time = 10;   
 
-constexpr float PWM_MAX            = 255.0f;   // LEDC a 8 bits
-constexpr float MAX_WHEEL_RPM      = 400.0f;   // TODO: medir RPM maximas reales a 100% PWM
-constexpr float K_FF               = PWM_MAX / MAX_WHEEL_RPM; // feedforward (PWM por RPM)
-constexpr float RPM_LIMIT_CMD      = MAX_WHEEL_RPM * 0.9f;    // deja margen al PID
-constexpr float RPM_FILTER_ALPHA   = 0.3f;     // filtro exponencial (0..1, menor = mas suave)
+constexpr float PWM_MAX            = 255.0f;   
+constexpr float MAX_WHEEL_RPM      = 450.0f;   
+constexpr float K_FF               = PWM_MAX / MAX_WHEEL_RPM; 
+constexpr float RPM_LIMIT_CMD      = MAX_WHEEL_RPM * 0.9f;    
+constexpr float RPM_FILTER_ALPHA   = 0.3f;     
  
-// Relacion entre el eje del encoder y la rueda (1.0 si el AS5600 esta en la rueda)
-constexpr float ENC_TO_WHEEL_RATIO = 1.0f;
-// Signo de cada encoder (el motor derecho suele estar espejado). Ajustar al probar.
+// Relacion entre el eje del encoder y la rueda 
+constexpr float GEAR_REDUCTION = 32.0f;
+constexpr float ENC_TO_WHEEL_RATIO = 1.0f/GEAR_REDUCTION;
+// Ajustar en pruebas
 constexpr float ENC_SIGN_L         = 1.0f;
 constexpr float ENC_SIGN_R         = -1.0f;
  
-// Limites de aceleracion del vector (rampa). Poner valores muy altos para desactivar.
-constexpr float V_ACCEL_MAX        = 4.0f;     // m/s^2
-constexpr float W_ACCEL_MAX        = 30.0f;    // rad/s^2
+// Limites de aceleracion del vector
+constexpr float V_ACCEL_MAX        = 4.0f;     
+constexpr float W_ACCEL_MAX        = 30.0f;    
  
-constexpr float W_MAX              = 6.0f;     // rad/s maximo al seguir un objetivo
- 
+constexpr float W_MAX              = 6.0f;     
+// Limitar dento de un rango 
 static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
@@ -319,6 +320,79 @@ VectorDirection getStateMotor(State s){
             return {0.0f, 0.0f};
     }
 }
+
+/*struct SensorData{
+    bool ls_fl = false; ls_fr = false; ls_rl = false; ls_rr = false;
+    bool enemy_f = false; enemy_l = false; enemy_r = false;
+    float enemy_dist = 0.0f;
+};
+
+SensorData readSensors(){
+    SensorData data;
+    return data;
+}
+
+constexpr uint32_t Line_Hold = 300; Lost_Hold = 600;  //ms
+constexpr float PUSH_DST = 0.10f; // m
+
+State State_decide (const SensorData &s, uint32_t now_ms){
+    static State held = IDLE;
+    static uint32_t hold_until = 0;
+    static int lastSide = 0;  // -1 = left, 1 = right, 0 = front
+
+    // LS
+    State line = IDLE;
+    if (s.ls_fl) line = LINE_FL;
+    else if (s.ls_fr) line = LINE_FR;
+    else if (s.ls_rl) line = LINE_RL;
+    else if (s.ls_rr) line = LINE_RR;
+
+    if(line != IDLE){
+        held = line;
+        hold_until = now_ms + Line_Hold;
+        return line;
+    }
+
+    if(held != IDLE && now_ms < hold_until)return held;
+    held = IDLE;
+
+    // Enemy
+    if (s.enemy_f) {
+        lastSide = 0;
+        return ENEMY_FOUND;
+    }
+    else if (s.enemy_l) {
+        lastSide = -1;
+        return ENEMY_LOST_L;
+    }
+    else if (s.enemy_r) {
+        lastSide = 1;
+        return ENEMY_LOST_R;
+    }
+    if (lastSide != 0 && (now_ms - lastSeen) < LOST_HOLD_MS) {
+        return (lastSide < 0) ? ENEMY_LOST_L : ENEMY_LOST_R;
+    }
+
+    // Search
+    return SEARCHING;
+}
+*/
+// test borrar despues
+State tests(uint32_t t){
+    if (t < 5000) return SEARCHING;
+    else if (t < 10000) return ENEMY_FOUND;
+    else if (t < 15000) return ENEMY_LOST_L;
+    else if (t < 20000) return ENEMY_LOST_R;
+    else if (t < 25000) return PUSHING;
+    else if (t < 30000) return PUSHING_LOSING;
+    else if (t < 35000) return LINE_FL;
+    else if (t < 40000) return LINE_FR;
+    else if (t < 45000) return LINE_RL;
+    else if (t < 50000) return LINE_RR;
+    else if (t < 55000) return CLOSE_TO_LINE;
+    else return IDLE;
+}
+
 float PID_calc(PID &pid, float set_point, float measured, float dtime, float out_limit) {
  
     if (dtime <= 0.0f) return 0.0f;     // evita division entre cero
@@ -417,30 +491,75 @@ float Read_ANGLE2()
         as5600_right
     );
 }
-struct WheelEncoder {
-    float last_angle = 0.0f;
-    float rpm        = 0.0f;
-    bool  initialized = false;
-};
-WheelEncoder encL, encR;
-
-float update_wheel_rpm(WheelEncoder &e, float angle_deg, float sign, float dt) {
-    if (!e.initialized) {
-        e.last_angle = angle_deg;
-        e.initialized = true;
-        return 0.0f;
+//Lectura y acumulacion de encoders
+static bool as5600_read_raw(i2c_master_dev_handle_t device, uint16_t &out) {
+    uint8_t reg = AS5600_RAW_ANGLE_HIGH;
+    uint8_t data[2] = {0, 0};
+    if (i2c_master_transmit_receive(device, &reg, 1, data, 2, 5) != ESP_OK) {
+        return false;
     }
-    if (dt <= 0.0f) return e.rpm;
-
-    float delta = angle_deg - e.last_angle;
-    if (delta >  180.0f) delta -= 360.0f;     // cruce de 360 -> 0
-    if (delta < -180.0f) delta += 360.0f;     // cruce de 0 -> 360
-    e.last_angle = angle_deg;
-
-    float rpm_raw = (delta / 360.0f) / dt * 60.0f * sign * ENC_TO_WHEEL_RATIO;
-    e.rpm += RPM_FILTER_ALPHA * (rpm_raw - e.rpm);   // filtro exponencial
-    return e.rpm;
+    out = ((static_cast<uint16_t>(data[0]) << 8) | data[1]) & 0x0FFF;
+    return true;
 }
+
+struct EncAccum
+{
+    volatile int32_t count = 0;
+    uint16_t last = 0;
+    bool init = false;
+};
+EncAccum accL, accR;
+
+static void accumulate(EncAccum &e, uint16_t raw){
+    if (!e.init) {
+        e.last = raw;
+        e.init = true;
+        return;
+    }
+    int16_t delta = (int16_t)(raw - e.last);
+    if (delta > 2048) delta -= 4096;
+    else if (delta < -2048) delta += 4096;
+    e.last = raw;
+    e.count += delta;
+}
+
+// Task 1kHz
+static void enc_timer_cb(void *){
+        uint16_t raw;
+    if (as5600_read_raw(as5600_left, raw)) {
+        accumulate(accL, raw);
+    }
+    if (as5600_read_raw(as5600_right, raw)) {
+        accumulate(accR, raw);
+    }
+}
+static void start_enc_sample(){
+    esp_timer_create_args_t args = {};
+    args.callback = enc_timer_cb;
+    args.name = "enc_timer";
+    esp_timer_handle_t timer;
+    ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, 1000));
+}
+
+// RPM de rueda
+struct WheelRPMState{
+    int32_t prev = 0;
+    float RPM = 0.0f;
+};
+
+WheelRPMState rsL, rsR;
+
+float wheel_rpm(EncAccum &e, WheelRPMState &s, float sign, float dt){
+    if(dt <= 0.0f) return s.RPM;
+    int32_t current = e.count;
+    int32_t delta = current - s.prev;
+    s.prev = current;
+    float rpm_raw = (delta / 4096.0f)/ dt * 60.0f * sign * ENC_TO_WHEEL_RATIO;
+    s.RPM += RPM_FILTER_ALPHA * (rpm_raw - s.RPM);
+    return s.RPM;
+}
+
 
 //=======================================================MAIN-START=======================================================
 extern "C" void app_main(void)
@@ -506,22 +625,31 @@ extern "C" void app_main(void)
 
     //---------------------Inicializar sensores y motores---------------------
     init_as5600();
+    start_enc_sample();
     init_gpio_adc_pwm();
-    DistanceS:: initAll();
+    //DistanceS:: initAll();
+    VectorDirection currentVec = {0.0f, 0.0f};
 
+    vTaskDelay(pdMS_TO_TICKS(3000));// 3s para dejar el robot
+
+    rsL.prev = accL.count;
+    rsR.prev = accR.count;
     uint64_t previous_time = esp_timer_get_time();   
-    VectorDirection currentVec = {0.0f, 0.0f};            
+    uint32_t t_start_ms = (uint32_t)(previous_time / 1000);
 
     while (true) {
         uint64_t now = esp_timer_get_time();
         float dTime = (now - previous_time) / 1e6f;
         previous_time = now;
 
-        //RPM
-        float rpmL = update_wheel_rpm(encL, Read_ANGLE1(), ENC_SIGN_L, dTime);
-        float rpmR = update_wheel_rpm(encR, Read_ANGLE2(), ENC_SIGN_R, dTime);
+        uint32_t now_ms = (uint32_t)(now / 1000);
+        robotState = tests(now_ms - t_start_ms);             // Pruebas
 
-        DistanceS::distances medidas = DistanceS::readAll();
+        //RPM
+        float rpmL = wheel_rpm(accL, rsL, ENC_SIGN_L, dTime);
+        float rpmR = wheel_rpm(accR, rsR, ENC_SIGN_R, dTime);
+
+        //DistanceS::distances medidas = DistanceS::readAll();
         
         // Vector objetivo
         VectorDirection targetVec = getStateMotor(robotState);
