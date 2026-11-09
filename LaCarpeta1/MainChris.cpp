@@ -912,10 +912,10 @@ extern "C" void app_main(void)
 
         static int loop_counter = 0;   // Contador para imprimir cada 20 iteraciones  SEGUN EL LOOP TIME DE 10ms, SE IMPRIME CADA 200ms
         loop_counter = loop_counter + 1;
-        if (loop_counter % 20)
+        if (loop_counter >= 20)
         {
             loop_counter = 0;
-            printf("Robot State: %d, GO: %d, PWM_L: %.2f, PWM_R: %.2f, RPM_L: %.2f, RPM_R: %.2f\n", robotState, go, K_FF * currentVec.v - currentVec.w * wheelBase * 0.5f, K_FF * currentVec.v + currentVec.w * wheelBase * 0.5f, rsL.RPM, rsR.RPM);
+            printf("estado=%d go=%d pwmL=%.0f pwmR=%.0f rpmL=%.1f rpmR=%.1f\n", robotState, go, pwmL, pwmR, rpmL, rpmR);
         }
 
         //RPM
