@@ -59,10 +59,10 @@ Cosas a tomar en cuenta:
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "Hardware/motor.h"
-#include "Hardware/distance_sensor.h"
-#include "Hardware/line_sensor.h"
-#include "Comunication/i2c.h"
+//#include "Hardware/motor.h"
+//#include "Hardware/distance_sensor.h"
+//#include "Hardware/line_sensor.h"
+//#include "Comunication/i2c.h"
 
 //---------------------Propiedades del robot---------------------
 // Medidas fisicas del robot
@@ -595,6 +595,7 @@ void init_gpio_adc_pwm() {
     ESP_ERROR_CHECK(gpio_set_direction(RDY_PIN, GPIO_MODE_OUTPUT));
     ESP_ERROR_CHECK(gpio_set_direction(GO_PIN, GPIO_MODE_INPUT));
 
+    ESP_ERROR_CHECK(gpio_set_pull_mode(GO_PIN, GPIO_PULLDOWN_ONLY)); // Configura la resistencia pull-down para el pin GO_PIN
     // Entradas ADC
     adc_oneshot_chan_cfg_t adc_channel_config = {
         .atten = ADC_ATTEN_DB_12,
@@ -880,7 +881,7 @@ extern "C" void app_main(void)
 
     start_enc_sample();
     
-    DistanceS:: initAll();
+    //DistanceS:: initAll();
 
     VectorDirection currentVec = {0.0f, 0.0f};
 
@@ -906,12 +907,22 @@ extern "C" void app_main(void)
         } else if (robotSumo.getState() == IDLE) {
             robotSumo.changeState(SEARCHING);
         }
+
         robotState = robotSumo.getState();
+
+        static int loop_counter = 0;   // Contador para imprimir cada 20 iteraciones  SEGUN EL LOOP TIME DE 10ms, SE IMPRIME CADA 200ms
+        loop_counter = loop_counter + 1;
+        if (loop_counter % 20)
+        {
+            loop_counter = 0;
+            printf("Robot State: %d, GO: %d, PWM_L: %.2f, PWM_R: %.2f, RPM_L: %.2f, RPM_R: %.2f\n", robotState, go, K_FF * currentVec.v - currentVec.w * wheelBase * 0.5f, K_FF * currentVec.v + currentVec.w * wheelBase * 0.5f, rsL.RPM, rsR.RPM);
+        }
+
         //RPM
         float rpmL = wheel_rpm(accL, rsL, ENC_SIGN_L, dTime);
         float rpmR = wheel_rpm(accR, rsR, ENC_SIGN_R, dTime);
 
-        //DistanceS::distances medidas = DistanceS::readAll();
+        //DistanceS::distances medidas = DistanceS::readAll();      // SE QUITA EL COMENTARIO PARA QUE NO SE LEA EL SENSOR DE DISTANCIA, YA QUE NO SE ESTA USANDO EN EL CODIGO ACTUAL PARA QUE COMPILE
         
         // Vector objetivo
         VectorDirection targetVec = getStateMotor(robotState);

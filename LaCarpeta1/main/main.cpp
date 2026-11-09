@@ -59,10 +59,10 @@ Cosas a tomar en cuenta:
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "Hardware/motor.h"
-#include "Hardware/distance_sensor.h"
-#include "Hardware/line_sensor.h"
-#include "Comunication/i2c.h"
+// #include "Hardware/motor.h"
+// #include "Hardware/distance_sensor.h"
+// #include "Hardware/line_sensor.h"
+// #include "Comunication/i2c.h"
 
 //---------------------Propiedades del robot---------------------
 // Medidas fisicas del robot
@@ -880,7 +880,7 @@ extern "C" void app_main(void)
 
     start_enc_sample();
     
-    DistanceS:: initAll();
+    // DistanceS:: initAll();
 
     VectorDirection currentVec = {0.0f, 0.0f};
 
