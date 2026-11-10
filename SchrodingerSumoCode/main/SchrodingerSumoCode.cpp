@@ -65,7 +65,7 @@ Cosas a tomar en cuenta:
 #include "Comunication/i2c.h"
 
 //---------------------Propiedades del robot---------------------
-// Medidas fisicas del robot
+// Medidas fisicas del robot pueden cambiar
 constexpr float r_llantas = 0.030f; // m
 constexpr float wheelBase = 0.180f; // m    MAY CHANGE I DONT KNOW
 
@@ -91,7 +91,7 @@ struct PID {
     float previous_measurement;
     float integral;
 };
- 
+// Ajustar kp y kd
 PID izq = {0.30f, 1.00f, 0.00f, 0.0f, 0.0f, 0.0f};
 PID der = {0.30f, 1.00f, 0.00f, 0.0f, 0.0f, 0.0f};
  
@@ -114,23 +114,22 @@ constexpr uint16_t dIS = 150;
 constexpr uint32_t loop_time = 10;   
 
 constexpr float PWM_MAX            = 255.0f;   
-constexpr float MAX_WHEEL_RPM      = 450.0f;   
+constexpr float MAX_WHEEL_RPM      = 450.0f; // Ajustable  
 constexpr float K_FF               = PWM_MAX / MAX_WHEEL_RPM; 
 constexpr float RPM_LIMIT_CMD      = MAX_WHEEL_RPM * 0.9f;    
-constexpr float RPM_FILTER_ALPHA   = 0.3f;     
+constexpr float RPM_FILTER_ALPHA   = 0.3f; // Ajustable, mucho ruido dismunuir, PID lento aumentar  
  
 // Relacion entre el eje del encoder y la rueda 
 constexpr float GEAR_REDUCTION = 32.0f;
 constexpr float ENC_TO_WHEEL_RATIO = 1.0f/GEAR_REDUCTION;
-// Ajustar en pruebas
+// Ajustar en pruebas el signo
 constexpr float ENC_SIGN_L         = 1.0f;
 constexpr float ENC_SIGN_R         = -1.0f;
  
-// Limites de aceleracion del vector
+// Limites de aceleracion del vector, ajustar
 constexpr float V_ACCEL_MAX        = 4.0f;     
 constexpr float W_ACCEL_MAX        = 30.0f;    
  
-constexpr float W_MAX              = 6.0f;     
 // Limitar dento de un rango 
 static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
@@ -289,35 +288,30 @@ int Read_ENC1();
 int Read_ENC2();
 void motor_set(float izqPWM, float derPWM);
 void updateMotors(float output_izq, float output_der);
+// Valores de los vectores ajustar con el doyo
+constexpr float TURN_LEFT = 1.0f;   
+constexpr float V_SEARCH = 0.30f, W_SEARCH = 3.0f;
+constexpr float V_ATTACK = 0.80f;
+constexpr float V_PUSH   = 1.00f;
+constexpr float V_TRACK  = 0.30f, W_TRACK  = 4.0f;
+constexpr float V_BACK   = 0.40f, W_ESCAPE = 4.0f;
+constexpr float V_FLEE   = 0.80f, W_FLEE   = 1.5f;
 
 VectorDirection getStateMotor(State s){
     switch (s) {
+        case SEARCHING:      return {V_SEARCH,  TURN_LEFT * W_SEARCH};
+        case ENEMY_FOUND:    return {V_ATTACK,  0.0f};
+        case ENEMY_LOST_L:   return {V_TRACK,   TURN_LEFT * W_TRACK};
+        case ENEMY_LOST_R:   return {V_TRACK,  -TURN_LEFT * W_TRACK};
+        case PUSHING:        return {V_PUSH,    0.0f};
+        case PUSHING_LOSING: return {V_PUSH,    0.0f};
+        case LINE_FL:        return {-V_BACK,  -TURN_LEFT * W_ESCAPE};
+        case LINE_FR:        return {-V_BACK,   TURN_LEFT * W_ESCAPE};
+        case LINE_RL:        return {V_FLEE,    TURN_LEFT * W_FLEE};
+        case LINE_RR:        return {V_FLEE,   -TURN_LEFT * W_FLEE};
+        case CLOSE_TO_LINE:  return {0.0f, 0.0f};
         case IDLE:
-            return {0.0f, 0.0f};
-        case SEARCHING:
-            return {0.5f, 0.0f};
-        case ENEMY_FOUND:
-            return {1.0f, 0.0f};
-        case ENEMY_LOST_L:
-            return {0.5f, 0.5f};
-        case ENEMY_LOST_R:
-            return {0.5f, -0.5f};
-        case PUSHING:
-            return {1.0f, 0.0f};    
-        case PUSHING_LOSING:
-            return {0.5f, 0.0f};
-        case LINE_FL:
-            return {0.0f, 0.5f};
-        case LINE_FR:
-            return {0.0f, -0.5f};
-        case LINE_RL:
-            return {0.0f, 0.5f};
-        case LINE_RR:
-            return {0.0f, -0.5f};
-        case CLOSE_TO_LINE:
-            return {0.0f, 0.0f};
-        default:
-            return {0.0f, 0.0f};
+        default:             return {0.0f, 0.0f};
     }
 }
 
@@ -412,7 +406,6 @@ float PID_calc(PID &pid, float set_point, float measured, float dtime, float out
     float unsat = p + i + d;
     float sat   = clampf(unsat, -out_limit, out_limit);
  
-    // Anti-windup: solo acumula si no esta saturado, o si el error ayuda a salir de la saturacion
     bool saturated_high = unsat >  out_limit;
     bool saturated_low  = unsat < -out_limit;
     if ((!saturated_high && !saturated_low) ||
@@ -833,6 +826,7 @@ static void driver_write(ledc_channel_t fwdCh, ledc_channel_t revCh, float pwm) 
 }
 
 void motor_set(float izqPWM, float derPWM) {
+    // Invertir canales en caso de que una rueda gire al reves
     driver_write(MTR1_R, MTR1_L, izqPWM);   // izquierdo
     driver_write(MTR2_R, MTR2_L, derPWM);   // derecho
 }
