@@ -1,8 +1,15 @@
 #pragma once
+/* 
+can also use the following: (pragma is just more modern and standard)
+#ifndef SENSOR_DATA_H
+#define SENSOR_DATA_H
 
+#endif
+*/
 #include <cstdint> //unit16_t (tipo de 16 bits sin signo)
 
 /*
+*   sensor_data.h
 * Sensor data structure
 */
 
