@@ -3,12 +3,13 @@
 #include "Robot/sensor_data.h"     // struct SensorData
 #include "Robot/states.h"          // enum state
 #include <cstdint> //unit16_t (tipo de 16 bits sin signo)
-//Note, it does not need to spefici if it is public or private, because of the header file
-/* Sumo robot class
+//Note, it does not need to spefici if it is public or private, because of the header in both cpp and h file, just the h
+/* Sumo robot class 
 * cerebro del robot, contiene los estados y la logica de control
 */
 
 class SumoRobot {
+    
 public:
     SumoRobot();
     //   el sensor data. con el & sacas una referencia al objeto, para no copiarlo y ahorrar memoria. el nombre es arbitrario
