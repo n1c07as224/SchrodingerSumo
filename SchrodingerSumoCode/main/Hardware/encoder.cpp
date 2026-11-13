@@ -12,6 +12,7 @@ static uint16_t last_radians_2;
 
 static uint64_t previous_time;
 
+namespace Encoder {
 
 void initAll() {
 
@@ -56,8 +57,8 @@ void readRPM() {
     float rpm_1 = (dRadians_1 / dTime) * 9.549296f;
     float rpm_2 = (dRadians_2 / dTime) * 9.549296f;
 
-    MTR::L_rpm.store(rpm_1);
-    MTR::R_rpm.store(rpm_2);
+    MTR_DATA::L_rpm.store(rpm_1);
+    MTR_DATA::R_rpm.store(rpm_2);
 
     last_radians_1 = actual_radians_1;
     last_radians_2 = actual_radians_2;
@@ -65,6 +66,6 @@ void readRPM() {
     previous_time = current_time;
 }
 
-
+}
 
 

@@ -4,8 +4,11 @@
 #include "driver/gpio.h"
 #include <cstdint>
 #include "vl53l0x.h"
+#include "../Datos_globales.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-using namespace DistanceS;
+namespace DistanceS {
 
 DS FL {.address = 0x29, .XShut = GPIO_NUM_14};
 DS FC {.address = 0x30, .XShut = GPIO_NUM_15};
@@ -75,7 +78,7 @@ uint16_t DS::read() {
 }
 
 
-distances getAllDistances() {
+void readDistances() {
     FL.read();
     FC.read();
     FR.read();
@@ -83,7 +86,13 @@ distances getAllDistances() {
     RC.read();
     RR.read();
 
-    return {FL.distance, FC.distance, FR.distance, RL.distance, RC.distance, RR.distance};
+    DS_DATA::FL_dist.store(FL.distance);
+    DS_DATA::FC_dist.store(FC.distance);
+    DS_DATA::FR_dist.store(FR.distance);
+    DS_DATA::RL_dist.store(RL.distance);
+    DS_DATA::RC_dist.store(RC.distance);
+    DS_DATA::RR_dist.store(RR.distance);
 }
 
+}
 

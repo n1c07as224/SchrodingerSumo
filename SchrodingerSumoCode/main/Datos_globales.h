@@ -10,25 +10,23 @@ Para leer un dato se usa
 dato.load();
 */
 
-namespace Global {
-
 // RPM de los motores
-namespace MTR {
+namespace MTR_DATA {
 
-    inline std::atomic<int> L_rpm{0};
-    inline std::atomic<int> R_rpm{0};
+    inline std::atomic<float> L_rpm{0};
+    inline std::atomic<float> R_rpm{0};
 
     enum class IS {
         High,
         Medium,
         Low
     };
-    inline std::atomic<IS> L_Ilevel{Low};
-    inline std::atomic<IS> R_Ilevel{Low};
+    inline std::atomic<IS> L_Ilevel{IS::Low};
+    inline std::atomic<IS> R_Ilevel{IS::Low};
 }
 
 // Distancia de los VL53L0X
-namespace DS {
+namespace DS_DATA {
 
     inline std::atomic<int> FL_dist{0};
     inline std::atomic<int> FC_dist{0};
@@ -47,5 +45,3 @@ namespace LS {
     inline std::atomic<bool> RR_state{false};
 }
 
-
-}

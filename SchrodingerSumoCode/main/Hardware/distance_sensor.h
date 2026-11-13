@@ -17,24 +17,11 @@ namespace DistanceS {
             
             // Funciones
             uint16_t read();
-            void setReadFreq();
 
     };
 
 
-    struct distances {
-
-        uint16_t FL_dist;
-        uint16_t FC_dist;
-        uint16_t FR_dist;
-        uint16_t RL_dist;
-        uint16_t RC_dist;
-        uint16_t RR_dist;
-
-    };
-
-
-    distances getAllDistances();
+    void readDistances();
 
     void initAll();
 

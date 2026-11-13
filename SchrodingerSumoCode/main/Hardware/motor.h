@@ -4,9 +4,6 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
-#include "driver/i2c_master.h"
-#include "as5600.h"
-
 
 namespace Motor {
 
