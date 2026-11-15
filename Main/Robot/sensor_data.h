@@ -31,4 +31,4 @@ struct SensorData {
     //POR SI SE REQUIERE ENCODERS
     //float rpmLeft;
     //float rpmRight;
-}
+};   //se me olvido ;

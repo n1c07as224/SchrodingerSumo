@@ -13,6 +13,11 @@
         stateStartTime = 0;
     }
 */
+
+static bool see(uint16_t dist, uint16_t threshold) {
+    return dist > 0 && dist < threshold;
+}
+
 SumoRobot::SumoRobot() : currentState(IDLE), previousState(IDLE), beforePreviousState(IDLE), stateStartTime(0) {
     // Constructor implementation
 }
@@ -43,7 +48,7 @@ void SumoRobot::update(const SensorData& sensorData, uint32_t now_ms) {
 
     if (nextState == SEARCHING) {
     
-        if (currentState != SEARCHING) forceState(SEARCHING, now_ms);
+        if (currentState == ENEMY_FOUND || currentState == PUSHING) forceState(SEARCHING, now_ms);
 
     } 
     
@@ -102,7 +107,10 @@ void SumoRobot::checkTimeout(uint32_t now_ms) {
                 forceState(SEARCHING, now_ms);
             }
             break;
-    
+        case ENEMY_BEHIND:
+            if (elapsedTime > ENEMY_BEHIND_TIME_MS){
+                forceState(SEARCHING, now_ms);
+            }
         default:
             break;
     }
@@ -117,19 +125,21 @@ State SumoRobot::getCurrentState() const {
 
 
 State SumoRobot::decideNextState(const SensorData& s) {
-    
+
     if (s.lineFL) return LINE_FL;
     if (s.lineFR) return LINE_FR;
     if (s.lineRL) return LINE_RL;
     if (s.lineRR) return LINE_RR;
 
-    if (s.distFront < PUSH_THRESHOLD) return PUSHING;
-    if (s.distFront < ENEMY_THRESHOLD || s.distFrontLeft < ENEMY_THRESHOLD
-        || s.distFrontRight < ENEMY_THRESHOLD) return ENEMY_FOUND;
+    if (see(s.distFront, PUSH_THRESHOLD)) return PUSHING;
 
-    if (s.distLeft < ENEMY_THRESHOLD)  return ENEMY_LOST_L;
-    if (s.distRight < ENEMY_THRESHOLD) return ENEMY_LOST_R;
+    if (see(s.distFront, ENEMY_THRESHOLD) ||
+        see(s.distFrontLeft, ENEMY_THRESHOLD) ||
+        see(s.distFrontRight, ENEMY_THRESHOLD)) return ENEMY_FOUND;
 
-    // no hay nada
+    if (see(s.distLeft, ENEMY_THRESHOLD))  return ENEMY_LOST_L;
+    if (see(s.distRight, ENEMY_THRESHOLD)) return ENEMY_LOST_R;
+    if (see(s.distBack, ENEMY_THRESHOLD)) return ENEMY_BEHIND;
+    //if (see(s.distBack, BACK_SENSOR_DIFF))
     return SEARCHING;
 }

@@ -9,7 +9,7 @@ WheelRPM calculateWheelRPM(VectorDirection vel, float wheelRadius, float wheelBa
     out.left  = (vel.v - vel.w * wheelBase * 0.5f) * k;
     out.right = (vel.v + vel.w * wheelBase * 0.5f) * k;
 
-     float maxAbs = fmaxf(fabsf(out.left), fabsf(out.right));
+    float maxAbs = fmaxf(fabsf(out.left), fabsf(out.right));
     if (maxAbs > RPM_LIMIT_CMD) {
         float s = RPM_LIMIT_CMD / maxAbs;
         out.left  *= s;

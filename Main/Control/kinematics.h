@@ -25,11 +25,8 @@ constexpr float RPM_LIMIT_CMD  = MAX_WHEEL_RPM * 0.9f;
 constexpr float V_ACCEL_MAX    = 4.0f;     // m/s^2
 constexpr float W_ACCEL_MAX    = 30.0f;    // rad/s^2
 
-inline float clampf(float x, float lo, float hi) {
-    if (x < lo) return lo;
-    if (x > hi) return hi;
-    return x;
-}
+float clampf(float x, float low, float high);
+
 WheelRPM calculateWheelRPM(VectorDirection vel, float wheelRadius, float wheelBase);
 
 VectorDirection rampVector(VectorDirection current, VectorDirection target, float dt);
