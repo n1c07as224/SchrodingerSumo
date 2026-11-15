@@ -2,7 +2,7 @@
 #include "adc_unit.h"
 
 
-using namespace ADC_UNIT;
+namespace ADC_UNIT {
 
 
 adc_oneshot_unit_handle_t adc_unit1_handle = NULL;
@@ -27,7 +27,7 @@ void init() {
 
 
 
-    adc_oneshot_chan_config_t chan_config = {
+    adc_oneshot_chan_cfg_t chan_config = {
         .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
     };
@@ -45,5 +45,5 @@ void init() {
 
 }
 
-
+}
 

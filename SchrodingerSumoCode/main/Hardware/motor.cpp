@@ -2,10 +2,11 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
-#include "driver/i2c_master.h"
-#include "as5600.h"
+#include "adc_unit.h"
+#include "pwm_timer.h"
+#include "motor.h"
 
-using namespace Motor;
+namespace Motor {
 
 MTR LEFT {
 
@@ -40,11 +41,39 @@ MTR RIGHT {
 };
 
 
-MTR::init() {
+void initAll() {
+
+    ADC_UNIT::init();
 
 
+    PWM_TIMER::init(LEDC_TIMER_0, LEDC_TIMER_10_BIT);
+
+
+    // Configurar canales PWM
+    auto configPWM = [](gpio_num_t pin, ledc_channel_t channel) {
+
+        ledc_channel_config_t config{};
+
+        config.gpio_num = pin;
+        config.speed_mode = LEDC_LOW_SPEED_MODE;
+        config.channel = channel;
+        config.timer_sel = LEDC_TIMER_0;
+        config.duty = 0;
+        config.hpoint = 0;
+
+        ESP_ERROR_CHECK(ledc_channel_config(&config));
+    };
+
+
+    // Motor izquierdo
+    configPWM(LEFT.PWML_PIN, LEFT.PWML);
+    configPWM(LEFT.PWMR_PIN, LEFT.PWMR);
+
+    // Motor derecho
+    configPWM(RIGHT.PWML_PIN, RIGHT.PWML);
+    configPWM(RIGHT.PWMR_PIN, RIGHT.PWMR);
 
 }
 
 
-
+}

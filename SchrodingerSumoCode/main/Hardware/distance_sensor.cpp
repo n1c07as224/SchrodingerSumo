@@ -1,10 +1,10 @@
-#include "distance_sensors.h"
+#include "distance_sensor.h"
 
-#include "Config/i2c_bus.h"
+#include "i2c_bus.h"
 #include "driver/gpio.h"
 #include <cstdint>
 #include "vl53l0x.h"
-#include "../Datos_globales.h"
+#include "Datos_globales.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -24,7 +24,7 @@ static DS* Sensors[6] = {&FL, &FC, &FR, &RL, &RC, &RR};
 
 void initAll() {
 
-    i2c_master_bus_handle_t bus_handle = i2c::getHandle(0);
+    i2c_master_bus_handle_t bus_handle = I2C::getHandle(0);
 
     // Declarar como salida todos los XShut y apagarlos todos
     for (int i = 0; i < 6; i++) {

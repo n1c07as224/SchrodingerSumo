@@ -1,7 +1,10 @@
 
 #include "as5600.h"
 #include "i2c_bus.h"
-#include "../Datos_globales.h"
+#include "Datos_globales.h"
+#include <cmath>
+#include "esp_timer.h"
+
 
 
 static as5600_handle_t as5600_handle_1 = nullptr;
@@ -16,12 +19,13 @@ namespace Encoder {
 
 void initAll() {
 
-    i2c_master_bus_handle_t bus_handle_1 = i2c::getHandle(0);
-    i2c_master_bus_handle_t bus_handle_2 = i2c::getHandle(1);
+    i2c_master_bus_handle_t bus_handle_1 = I2C::getHandle(0);
+    i2c_master_bus_handle_t bus_handle_2 = I2C::getHandle(1);
 
 
     as5600_i2c_config_t as5600_config = {
-        .scl_speed_hz = 100000
+        .scl_speed_hz = 100000,
+        .timeout_ms = 100
     };
 
     ESP_ERROR_CHECK(as5600_new_sensor(bus_handle_1, &as5600_config, &as5600_handle_1));
@@ -41,8 +45,8 @@ void readRPM() {
     float actual_radians_1;
     float actual_radians_2;
 
-    ESP_ERROR_CHECK(as5600_get_angle_radians(handle_1, &actual_radians_1));
-    ESP_ERROR_CHECK(as5600_get_angle_radians(handle_2, &actual_radians_2));
+    as5600_get_angle_radians(as5600_handle_1, &actual_radians_1);
+    as5600_get_angle_radians(as5600_handle_2, &actual_radians_2);
 
     float dRadians_1 = actual_radians_1 - last_radians_1;
     float dRadians_2 = actual_radians_2 - last_radians_2;

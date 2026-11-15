@@ -2,7 +2,7 @@
 #include "pwm_timer.h"
 
 
-using namespace PWM_TIMER; 
+namespace PWM_TIMER { 
 
 
 void init(ledc_timer_t timer_num, ledc_timer_bit_t bits_resolution) {
@@ -18,3 +18,4 @@ void init(ledc_timer_t timer_num, ledc_timer_bit_t bits_resolution) {
 
 }
 
+}
