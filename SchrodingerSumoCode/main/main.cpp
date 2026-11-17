@@ -128,7 +128,7 @@ extern "C" void app_main(void)
 {
 
     //---------------------Inicializar Protocolos---------------------
-    I2C::init(I2C_NUM_0, GPIO_NUM_8, GPIO_NUM_9); // Bus i2c 1 para todos los componentes i2c
+    I2C::init(I2C_NUM_0, GPIO_NUM_9, GPIO_NUM_8); // Bus i2c 1 para todos los componentes i2c
     I2C::init(I2C_NUM_1, GPIO_NUM_4, GPIO_NUM_5); // Bus i2c 2 para el segundo as5600 unicamente
 
 
@@ -136,13 +136,17 @@ extern "C" void app_main(void)
 
     //---------------------Inicializar Sensores Y Motores---------------------
     DistanceS::initAll();
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     DistanceS::readDistances();
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
 
     printf("Distancia FL: %d\n", DS_DATA::FL_dist.load()); 
-
+    printf("Distancia FC: %d\n", DS_DATA::FC_dist.load()); 
+    printf("Distancia FR: %d\n", DS_DATA::FR_dist.load()); 
+    printf("Distancia RL: %d\n", DS_DATA::RL_dist.load()); 
+    printf("Distancia RC: %d\n", DS_DATA::RC_dist.load()); 
+    printf("Distancia RR: %d\n", DS_DATA::RR_dist.load()); 
 
 
 
