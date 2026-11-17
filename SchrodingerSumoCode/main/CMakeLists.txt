@@ -15,4 +15,11 @@ idf_component_register(
         "Config"
         "Hardware"
         "Control"
+
+    REQUIRES
+        esp_adc
+        esp_driver_i2c
+        esp_driver_ledc
+        esp_driver_gpio
+        esp_timer
 )

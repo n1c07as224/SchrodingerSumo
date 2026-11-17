@@ -3,7 +3,9 @@
 #include "i2c_bus.h"
 #include "driver/gpio.h"
 #include <cstdint>
-#include "vl53l0x.h"
+extern "C" {
+    #include "vl53l0x.h"
+}
 #include "Datos_globales.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

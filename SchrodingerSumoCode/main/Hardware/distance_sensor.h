@@ -2,7 +2,9 @@
 
 #include <cstdint>
 #include "driver/gpio.h"
-#include "vl53l0x.h"
+extern "C" {
+    #include "vl53l0x.h"
+}
 
 namespace DistanceS {
 
